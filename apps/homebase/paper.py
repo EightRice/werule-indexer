@@ -984,6 +984,12 @@ class Paper:
                     'against': str(new_against),
                     'votesAgainst': current_votes_against + 1
                 })
+            elif support_val == 2:
+                # Abstain counts toward the quorum, as For does
+                transaction.update(proposal_ref, {
+                    'abstain': str(int(prop_data.get('abstain', "0")) + weight_val),
+                    'votesAbstain': prop_data.get('votesAbstain', 0) + 1
+                })
             return 'ok', prop_data
 
         try:

@@ -184,8 +184,10 @@ class Proposal:
         self.executionEndsBlock: Optional[int] = None
         self.inFavor: str = "0"
         self.against: str = "0"
+        self.abstain: str = "0"
         self.votesFor: int = 0
         self.votesAgainst: int = 0
+        self.votesAbstain: int = 0
         self.externalResource: Optional[str] = "(no link provided)"
         self.transactions: List[Txaction] = []
         self.votes: List['Vote'] = []
@@ -211,9 +213,11 @@ class Proposal:
             'turnoutPercent': self.turnoutPercent,
             'inFavor': self.inFavor,
             'against': self.against,
+            'abstain': self.abstain,
             'votesFor': self.votesFor,
             'latestStage': self.latestStage,
             'votesAgainst': self.votesAgainst,
+            'votesAbstain': self.votesAbstain,
             'externalResource': self.externalResource,
             'transactions': [tx.toJson() for tx in self.transactions],
         }
@@ -258,6 +262,8 @@ class Proposal:
         self.against = firestore_data.get('against', "0")
         self.votesFor = firestore_data.get('votesFor', 0)
         self.votesAgainst = firestore_data.get('votesAgainst', 0)
+        self.abstain = firestore_data.get('abstain', "0")
+        self.votesAbstain = firestore_data.get('votesAbstain', 0)
         self.externalResource = firestore_data.get(
             'externalResource', "(no link provided)")
 
