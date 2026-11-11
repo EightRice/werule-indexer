@@ -1001,9 +1001,10 @@ class Paper:
             print(f"Vote by {voter} on proposal {proposal_id} processed.")
             self._remember_title(proposal_id, prop_data.get('title'))
             title = self._proposal_title(proposal_id)
-            # Elections tally option indexes; other proposals 0 against, 1 for, 2 abstain
+            # Elections tally option indexes, 0 being reject (none of these); other proposals 0 against,
+            # 1 for, 2 abstain
             if prop_data.get('optionSource'):
-                choice = f"option {support}"
+                choice = "reject (none of these)" if int(support) == 0 else f"option {support}"
             else:
                 choice = {0: 'Against', 1: 'For', 2: 'Abstain'}.get(support, str(support))
             self._activity(log, 'vote', f"Voted {choice} on {title}", actor=voter, target_kind='proposal',
