@@ -29,6 +29,16 @@ python -m publisher --network Localhost --networks-index --target dir:../edge-ou
 
 Environment: `DOCSTORE_PATH` (default `data/werule.sqlite`), `NETWORKS_SOURCE`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` (for `r2:` targets), `NOTIFY_URL` and `NOTIFY_SECRET` (the Worker), `INDEXER_RELAYER_KEY` (pays gas to register DAO proposals on the projects they veto or overrule), `LOG_DIR`.
 
+## Local development
+
+werule with `--dart-define=LOCAL=true` reads `http://127.0.0.1:8788` (files) and `ws://127.0.0.1:8787` (live pushes). The local stack:
+
+1. `npx hardhat node` in trustless-contracts (chain 8545), then `npx hardhat run scripts/indexer-e2e/deploy.js --network localhost`, which writes `deployments/networks/Localhost.json`.
+2. `npm install` once in `publisher/worker`, then `python dev.py` here: the supervisor (indexer and publisher for every network file in trustless-contracts' `deployments`), the file server on 8788 and the Worker on 8787. Ctrl-C stops them all.
+3. `flutter run -d web-server --web-port 5005 --dart-define=LOCAL=true` in werule.
+
+`python dev.py --e2e --store <new file> --out <empty dir> --networks dir:<root>` runs the same stack on the e2e ports (8798, 8797) for tests that must not touch the main one.
+
 ## Tests
 
 ```
