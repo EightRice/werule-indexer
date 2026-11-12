@@ -1,4 +1,5 @@
-# live.autonet.computer: Worker + Channel Durable Object (CONTRACT.md section 7).
+# live.autonet.computer: Worker + Channel Durable Object (CONTRACT.md section 7)
+# + DebateQueue Durable Object, the debates intake (DEBATES.md section 6).
 # Nothing here is deployed by the tests; `wrangler deploy` is a manual, owner-run step.
 name = "autonet-live"
 main = "src/index.ts"
@@ -10,9 +11,21 @@ routes = [{ pattern = "live.autonet.computer", custom_domain = true }]
 name = "CHANNEL"
 class_name = "Channel"
 
+[[durable_objects.bindings]]
+name = "DEBATES"
+class_name = "DebateQueue"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Channel"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["DebateQueue"]
+
+[vars]
+# Where networks.json is read from (the debates intake checks the network and its chainId).
+DATA_URL = "https://data.autonet.computer"
 
 # Secrets (not in this file):
 #   npx wrangler secret put NOTIFY_SECRET

@@ -372,6 +372,7 @@ Secrets via `wrangler secret put NOTIFY_SECRET` (and `NOTIFY_SECRET_PREV`); loca
 - `GET /ws?channel=<channel>[&since=<seq>]`: validate channel regex (400 otherwise) and `since` as a non-negative safe integer, require `Upgrade: websocket` (426 otherwise), forward to the DO, which calls `ctx.acceptWebSocket`. No auth (data is public). Connecting to a channel that never received a notify MUST NOT write DO storage (only reads), so scripted connects to random channel names cost requests but leave nothing behind.
 - `POST /notify`: section 6. Fan out each message to its DO.
 - `GET /health`: `ok`.
+- `POST /debates` and `GET /debates/queue`: the debates intake, specified in [../DEBATES.md](../DEBATES.md) section 6. A second SQLite DO class, `DebateQueue` (binding `DEBATES`, migration `v2`), one instance per network; the network list and chainId come from `networks.json` under the `DATA_URL` var (cached 60 s). The queue read uses this section's HMAC over the empty body. Queued entries carry the signed fields normalized (hex lowercase, `nonce` as a decimal string) and `receivedAt` in epoch milliseconds; a rate-limited POST is 429, and reposting the same message by the same author returns its existing `seq`.
 
 ### 7.2 DO state (SQLite)
 

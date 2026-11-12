@@ -6,13 +6,17 @@
     "dev": "wrangler dev --port 8787",
     "dev:e2e": "wrangler dev --ip 127.0.0.1 --port 8797 --inspector-port 9239 --persist-to .wrangler/e2e",
     "typecheck": "tsc --noEmit",
-    "test:unit": "node --experimental-strip-types --no-warnings --test test/unit.test.mjs",
-    "test:e2e": "node --no-warnings test/e2e.mjs",
+    "test:unit": "node --experimental-strip-types --no-warnings --test test/unit.test.mjs test/debates.test.mjs",
+    "test:e2e": "node --experimental-strip-types --no-warnings test/e2e.mjs",
     "test": "npm run typecheck && npm run test:unit && npm run test:e2e"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261019.1",
     "typescript": "5.9.3",
     "wrangler": "4.151.3"
+  },
+  "dependencies": {
+    "@noble/curves": "1.4.0",
+    "@noble/hashes": "1.4.0"
   }
 }
