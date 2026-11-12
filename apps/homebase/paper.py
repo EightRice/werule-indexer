@@ -1312,9 +1312,6 @@ class Paper:
             # The economy module, attached at origination or by proposal, or detached ("")
             if key == 'jurisdiction.economy':
                 return self.economy_attached(log, value) if value else self.economy_detached()
-            # The autonet module: the main loop follows the jurisdiction's Substrate
-            if key == 'jurisdiction.autonet.substrate' and Web3.is_address(value):
-                return [('substrate', Web3.to_checksum_address(value), self.dao)]
 
         return None
 

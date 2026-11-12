@@ -1,7 +1,7 @@
 # activity.py
 #
 # A jurisdiction's activity feed: one document per indexed event, written by every app that
-# indexes something for the DAO (homebase, trustless, autonet), under the homebase DAO document:
+# indexes something for the DAO (DAOs and projects), under the homebase DAO document:
 #
 #   {daos_collection}/{dao}/activity/{txHash}_{logIndex}
 #       type         what happened: proposalCreated, vote, delegate, registryEdit, a project

@@ -19,10 +19,6 @@ load_dotenv()
 # NOTE: firebase_admin import is delayed until after FIRESTORE_EMULATOR_HOST is set
 from web3 import Web3
 from web3.exceptions import Web3RPCError
-from state import IndexerState
-from redundancy import RedundancyProtocol
-import socket
-import uuid
 
 # --- Safe Import for Discord Alerter ---
 try:
@@ -34,19 +30,12 @@ except ImportError:
     CAN_SEND_ALERTS = False
 
 # --- Argument Parsing ---
-parser = argparse.ArgumentParser(description="Unified Indexer for Homebase and AfterMe on Etherlink.")
+parser = argparse.ArgumentParser(description="werule indexer: DAOs and their projects.")
 parser.add_argument('network', choices=['mainnet', 'testnet', 'shadownet', 'localhost', 'base-sepolia'], help="The network to run.")
-parser.add_argument('app', nargs='*', default=None, choices=['homebase', 'afterme', 'trustless', 'autonet', 'all'], help="App(s) to index. One or more, or omit for 'all'. E.g. 'shadownet autonet homebase'.")
+parser.add_argument('app', nargs='*', default=None, choices=['homebase', 'trustless', 'all'], help="App(s) to index. One or more, or omit for 'all'.")
 
-# Redundancy arguments
-parser.add_argument('--mode', choices=['primary', 'secondary', 'standalone'], default='standalone',
-                    help="Redundancy mode: primary, secondary, or standalone (no redundancy)")
-parser.add_argument('--listen-port', type=int, default=9999,
-                    help="UDP port to listen on for redundancy heartbeats")
-parser.add_argument('--peer-address', type=str,
-                    help="Peer address for redundancy (format: host:port)")
 parser.add_argument('--instance-id', type=str,
-                    help="Unique instance identifier (auto-generated if not provided)")
+                    help="Instance name; an 'indexer-e2e' prefix guards the main local stack")
 
 parser.add_argument('--skip-historical', action='store_true',
                     help="Skip historical sync and go straight to active listening mode")
@@ -339,7 +328,6 @@ for app_name in apps_to_run:
             'addresses': app_addresses,
             'papers': app_papers,
             'daos_collection': papers_result.get('daos_collection'),  # For homebase
-            'wills_collection_name': network_config.get('wills_collection_name'),  # For afterme
         })
 
         print(f"Added {len(app_addresses)} addresses and {len(app_papers)} papers from {app_name}")
@@ -353,30 +341,6 @@ for app_name in apps_to_run:
 
 import startup_cache
 
-# --- Autonet: follow every jurisdiction's Substrate ---
-# Each jurisdiction with the autonet module records its Substrate in the registry; the DAO
-# indexer keeps those maps, so read them once here, and the main loop adds new ones live.
-def add_substrate_paper(address, dao=None):
-    # A jurisdiction's agent events also go to its DAO's activity feed (homebase Firestore)
-    dao_ref = app_data['homebase']['daos_collection'].document(dao) if dao and 'homebase' in app_data else None
-    if address in papers:
-        if dao_ref is not None and getattr(papers[address], 'dao_ref', None) is None:
-            papers[address].dao_ref = dao_ref
-        return
-    from apps.autonet.paper import Paper as AutonetPaper
-    papers[address] = AutonetPaper(address, web3, app_dbs['autonet'],
-                                   app_configs['autonet'].get('agents_collection', 'agents'), dao_ref=dao_ref)
-    if address not in listening_to_addresses:
-        listening_to_addresses.append(address)
-    print(f"[autonet] Following Substrate {address}")
-
-if 'autonet' in apps_to_run and 'homebase' in apps_to_run:
-    try:
-        for substrate, dao in app_modules['autonet']['indexer'].jurisdiction_substrates(app_data['homebase']['daos_collection']):
-            add_substrate_paper(substrate, dao)
-    except Exception as e:
-        print(f"Warning: could not read jurisdiction Substrates: {e}")
-
 # Startup reads were shared through startup_cache; the main loop reads live
 startup_cache.clear()
 
@@ -387,108 +351,6 @@ for hash_val, name in event_signatures.items():
     print(f"- {name}: {hash_val}")
 print("----------------------------------------------------")
 print(f"Listening for {len(event_signatures)} events on {len(listening_to_addresses)} contracts.")
-
-# --- Redundancy Setup ---
-current_role = args.mode  # primary, secondary, or standalone
-redundancy_enabled = args.mode in ['primary', 'secondary']
-redundancy_protocol = None
-state = None
-
-if redundancy_enabled:
-    # Initialize SQLite state
-    state_db_path = f"indexer_state_{args.network}.db"
-    state = IndexerState(state_db_path)
-
-    # Generate instance ID if not provided
-    instance_id = args.instance_id or f"indexer-{socket.gethostname()}-{uuid.uuid4().hex[:8]}"
-    state.set_instance_id(instance_id)
-    state.set_started_as(args.mode)
-
-    # Startup role detection: Check if we should switch roles
-    # Use the first available app to check Firestore last synced block
-    if apps_to_run:
-        try:
-            # Get local last processed block
-            local_last_block = state.get_last_processed_block()
-
-            firestore_last_block = read_checkpoint()
-            if firestore_last_block is not None:
-                # If Firestore is significantly ahead, we fell behind
-                if firestore_last_block > local_last_block + 5:
-                    print(f"\n!!! ROLE DETECTION: Firestore ahead (block {firestore_last_block}) vs local (block {local_last_block}) !!!")
-                    if args.mode == 'primary':
-                        print("!!! PRIMARY -> SECONDARY: Another instance took over while we were down !!!")
-                        current_role = 'secondary'
-                        state.set_current_role('secondary')
-                        alert(f"Role changed: PRIMARY -> SECONDARY (detected newer Firestore data at block {firestore_last_block})")
-                    else:
-                        print("Staying as SECONDARY (expected state)")
-                        state.set_current_role('secondary')
-                else:
-                    # We're caught up or ahead
-                    state.set_current_role(args.mode)
-                    print(f"Starting as {args.mode.upper()} (local block {local_last_block}, Firestore block {firestore_last_block})")
-            else:
-                # No Firestore state yet, use startup mode
-                state.set_current_role(args.mode)
-                print(f"Starting as {args.mode.upper()} (no Firestore checkpoint found)")
-        except Exception as e:
-            print(f"Warning: Could not perform startup role detection: {e}")
-            state.set_current_role(args.mode)
-    else:
-        state.set_current_role(args.mode)
-
-    # Get auth token from environment
-    auth_token = os.getenv('REDUNDANCY_AUTH_TOKEN', 'default-insecure-token')
-    if auth_token == 'default-insecure-token':
-        print("WARNING: Using default auth token! Set REDUNDANCY_AUTH_TOKEN environment variable for production.")
-
-    # Initialize redundancy protocol
-    def on_peer_register(peer_address, peer_data):
-        """Callback when peer registers."""
-        print(f"✅ Peer registered: {peer_data.get('instance_id')} at {peer_address}")
-        state.set_peer_address(f"{peer_address[0]}:{peer_address[1]}")
-        alert(f"✅ Redundancy: Peer {peer_data.get('instance_id')} registered at {peer_address[0]}:{peer_address[1]}")
-
-    def on_peer_heartbeat(peer_data):
-        """Callback when peer sends heartbeat."""
-        # Silently update (don't spam logs)
-        pass
-
-    def on_peer_failure():
-        """Callback when peer fails (no heartbeat)."""
-        global current_role
-        if current_role == 'secondary':
-            print("\n!!! PEER FAILURE DETECTED: Primary is down !!!")
-            print("!!! SECONDARY -> PRIMARY: Promoting to active indexer !!!")
-            current_role = 'primary'
-            state.set_current_role('primary')
-            alert("🚨 FAILOVER: Secondary promoted to PRIMARY (peer heartbeat timeout)")
-
-    redundancy_protocol = RedundancyProtocol(
-        listen_port=args.listen_port,
-        auth_token=auth_token,
-        instance_id=instance_id,
-        on_register=on_peer_register,
-        on_heartbeat=on_peer_heartbeat,
-        on_peer_failure=on_peer_failure
-    )
-    redundancy_protocol.start()
-
-    # If secondary, register with primary
-    if current_role == 'secondary' and args.peer_address:
-        try:
-            peer_host, peer_port = args.peer_address.split(':')
-            peer_port = int(peer_port)
-            print(f"Registering with primary at {peer_host}:{peer_port}...")
-            redundancy_protocol.register_with_peer(peer_host, peer_port, args.listen_port)
-        except Exception as e:
-            print(f"Error registering with peer: {e}")
-            alert(f"⚠️ Failed to register with peer at {args.peer_address}: {e}")
-
-    print(f"\n=== Redundancy Enabled: Role={current_role.upper()}, ListenPort={args.listen_port} ===\n")
-else:
-    print("\n=== Redundancy Disabled: Running in STANDALONE mode ===\n")
 
 # --- Main Indexing Loop ---
 heartbeat = 0
@@ -650,22 +512,12 @@ while True:
                 print(f"WARNING: Paper object not found for {contract_address}. Skipping event.")
                 continue
 
-            # Secondary instances monitor events but don't write to Firestore
-            if current_role == 'secondary':
-                continue  # Skip processing, just monitor
-
             new_contract_info = papers[contract_address].handle_event(log_entry, func=event_name)
             if event_name == 'ProposalCreated' and 'trustless' in apps_to_run:
                 notify_appeal_proposals(log_entry, papers)
             
             # Handle new contract events dynamically per app
-            if new_contract_info == "DELETED":
-                # AfterMe: Will was cleared
-                print(f"Removing cleared will {contract_address} from active listeners.")
-                if contract_address in listening_to_addresses: listening_to_addresses.remove(contract_address)
-                if contract_address in papers: del papers[contract_address]
-                print(f"Now listening to {len(listening_to_addresses)} addresses.")
-            elif isinstance(new_contract_info, list) and len(new_contract_info) in (2, 3) and all(isinstance(x, str) for x in new_contract_info):
+            if isinstance(new_contract_info, list) and len(new_contract_info) in (2, 3) and all(isinstance(x, str) for x in new_contract_info):
                 # Homebase: New DAO created (returns [dao_address, token_address, registry_address])
                 if 'homebase' in apps_to_run:
                     dao_address_new, token_address_new = new_contract_info[:2]
@@ -713,8 +565,6 @@ while True:
                                 dao_address=item[2],
                             )})
                         print(f"Now listening to {len(listening_to_addresses)} addresses.")
-                    elif item[0] == 'substrate' and 'autonet' in apps_to_run:
-                        add_substrate_paper(item[1], item[2] if len(item) > 2 else None)
                     elif item[0] == 'debate' and 'homebase' in apps_to_run:
                         # A new debate: follow its arguments, recorded under its DAO
                         debate_new = Web3.to_checksum_address(item[1])
@@ -746,7 +596,7 @@ while True:
                             )})
                         print(f"Now listening to {len(listening_to_addresses)} addresses.")
             elif isinstance(new_contract_info, str) and new_contract_info.startswith("0x"):
-                # Handle single address return from AfterMe or Trustless
+                # A single address: a new project, returned by the economy that emitted NewProject
                 # Determine which app based on the emitting paper's kind
 
                 emitting_paper = papers.get(contract_address)
@@ -774,23 +624,6 @@ while True:
                         )})
                     print(f"Now listening to {len(listening_to_addresses)} addresses.")
 
-                # AfterMe: New will created (returns will address)
-                elif 'afterme' in apps_to_run:
-                    new_will_address = new_contract_info
-                    print(f"Adding new AfterMe Will {new_will_address} to listener.")
-                    if new_will_address not in listening_to_addresses: listening_to_addresses.append(new_will_address)
-                    if new_will_address not in papers:
-                        # Get afterme-specific data
-                        afterme_db = app_dbs['afterme']
-                        afterme_data = app_data['afterme']
-                        wills_collection_name = afterme_data.get('wills_collection_name')
-
-                        # Import afterme Paper class
-                        from apps.afterme.paper import Paper as AftermePaper
-
-                        papers.update({new_will_address: AftermePaper(address=new_will_address, kind="afterme_will", db=afterme_db, web3=web3, wills_collection_name=wills_collection_name)})
-                    print(f"Now listening to {len(listening_to_addresses)} addresses.")
-
             discovered = [a for a in listening_to_addresses if a not in known_before]
             if discovered:
                 # Include the whole discovering transaction: a project's initial SendFunds is emitted
@@ -806,32 +639,18 @@ while True:
         last_processed_block = to_block
 
         # Governors emit nothing when a proposal is defeated or lapses, so appeal and veto proposals are polled
-        if 'trustless' in apps_to_run and current_role != 'secondary' and time.time() - last_appeal_check >= APPEAL_CHECK_SECONDS:
+        if 'trustless' in apps_to_run and time.time() - last_appeal_check >= APPEAL_CHECK_SECONDS:
             last_appeal_check = time.time()
             app_modules['trustless']['indexer'].check_appeals(papers, web3)
-
-        # Update SQLite state (always, even if secondary)
-        if state:
-            state.set_last_processed_block(last_processed_block)
-
-        # Update Firestore checkpoint - ONLY if we're primary (or standalone)
-        should_write_to_firestore = (current_role in ['primary', 'standalone'])
 
         # At most once a minute: a restart resumes from the checkpoint and the handlers are idempotent,
         # so a checkpoint up to a minute old only means re-reading that minute of logs
         should_update_checkpoint = time.time() - last_checkpoint_write >= CHECKPOINT_INTERVAL
 
-        if apps_to_run and should_update_checkpoint and should_write_to_firestore:
+        if apps_to_run and should_update_checkpoint:
             write_checkpoint(last_processed_block)
             last_checkpoint_write = time.time()
 
-        # Send heartbeat to peer
-        if redundancy_protocol and current_role in ['primary', 'secondary']:
-            try:
-                redundancy_protocol.send_heartbeat(current_role, last_processed_block)
-            except Exception as e:
-                print(f"Warning: Could not send heartbeat: {e}")
-        
     except Web3RPCError as e:
         # This is a more robust way to catch recoverable errors without crashing
         error_message = str(e).lower()

@@ -1,1 +1,0 @@
-["Sarmale Calii", "SMLC", "neste sarmale nu tocmai incalzite dar nici reci", "4", "0", ["0x06E5b15Bc39f921e1503073dBb8A5dA2Fc6220E9", "0x6E147e1D239bF49c88d64505e746e8522845D8D3"], ["0", "1", "0", "4", "400000000000000000000", "100000000000000000000"], [], [], false, true]

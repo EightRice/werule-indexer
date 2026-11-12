@@ -1,12 +1,5 @@
-# Indexer Configuration
-# Specify which apps should be enabled for indexing
+# Modules this indexer runs: homebase (DAOs, proposals, members, debates) and trustless (economies and their projects).
 
 enabled_apps:
   - homebase
-  # - afterme  # Disabled by default - not live yet
   - trustless
-  - autonet  # Substrate.sol agent directory -> autonet-275416 Firestore
-
-# You can add more apps here as they become available
-# Example:
-# - myapp
