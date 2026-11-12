@@ -13,9 +13,9 @@ chain events -> indexer (app.py) -> document store (SQLite) -> publisher -> R2 f
 
 ## Networks
 
-A network is a JSON file, `networks/<Name>.json`, written by the deploy that put the factories on that chain (see trustless-contracts). Its fields are the network's addresses and settings: `rpc`, `chainId`, `jurisdictionFactory`, `moduleCatalog`, `moduleProcessor`, `nativeProject`, `erc20Project`, `debatesFactory`, `fromBlock`, and so on. Adding a network is adding its file; the supervisor picks it up within a minute.
+A network is a JSON file, `networks/<Name>.json`, written by the deploy that put the factories on that chain (trustless-contracts' `scripts/deploy-jurisdiction-suite.js` publishes it to R2 when R2 keys are available, the way it used to write Firestore). Its fields are the network's addresses and settings: `rpc`, `chainId`, `jurisdictionFactory`, `moduleCatalog`, `moduleProcessor`, `nativeProject`, `erc20Project`, `debatesFactory`, `fromBlock`, and so on. Adding a network is adding its file; the supervisor picks it up within a minute.
 
-`NETWORKS_SOURCE` says where the files are: `dir:<root>` (files under `<root>/networks/`, default `dir:.`) or `r2:<bucket>` (objects under `networks/`; use a private bucket). `RPC_<NAME>` overrides a network's `rpc`, so a keyed RPC URL stays out of the file.
+`NETWORKS_SOURCE` says where the files are: `dir:<root>` (files under `<root>/networks/`, default `dir:.`) or `r2:<bucket>` (objects under `networks/`, in the data bucket itself: a network file holds only public facts, and R2 keys decide who can write it). `RPC_<NAME>` overrides a network's `rpc`, so a keyed RPC URL stays out of the file.
 
 ## Running
 

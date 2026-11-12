@@ -3,7 +3,7 @@ factories on that chain (trustless-contracts), read by the indexer at startup an
 to decide what to run.
 
     NETWORKS_SOURCE=dir:<root>            files <root>/networks/<Name>.json (default dir:., the repo)
-    NETWORKS_SOURCE=r2:<bucket>           objects networks/<Name>.json in a PRIVATE bucket
+    NETWORKS_SOURCE=r2:<bucket>           objects networks/<Name>.json (the data bucket: the files are public)
 
     python networks.py put <file>...      copies network files into NETWORKS_SOURCE, after checking them
     python networks.py list               the networks NETWORKS_SOURCE has
