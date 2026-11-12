@@ -1,5 +1,7 @@
-# Modules this indexer runs: homebase (DAOs, proposals, members, debates) and trustless (economies and their projects).
+# Modules this indexer runs: homebase (DAOs, proposals, members, debates), trustless (economies and their
+# projects) and agents (a jurisdiction's Autonet agent events, in its DAO's activity feed).
 
 enabled_apps:
   - homebase
   - trustless
+  - agents

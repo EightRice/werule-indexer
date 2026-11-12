@@ -31,7 +31,7 @@ except ImportError:
 # --- Argument Parsing ---
 parser = argparse.ArgumentParser(description="werule indexer: DAOs and their projects.")
 parser.add_argument('network', help="Network name: its file networks/<name>.json in NETWORKS_SOURCE (e.g. Localhost)")
-parser.add_argument('app', nargs='*', default=None, choices=['homebase', 'trustless', 'all'], help="App(s) to index. One or more, or omit for 'all'.")
+parser.add_argument('app', nargs='*', default=None, choices=['homebase', 'trustless', 'agents', 'all'], help="App(s) to index. One or more, or omit for 'all'.")
 
 parser.add_argument('--instance-id', type=str,
                     help="Instance name; an 'indexer-e2e' prefix guards the main local stack")
@@ -228,6 +228,12 @@ def write_checkpoint(block):
 # once recorded, balances are read from chain), so the replay adds what is missing and changes nothing
 # else.
 resume_checkpoint = read_checkpoint()
+# A store that has never indexed this network starts where the network's contracts start (the network
+# file's fromBlock), so a fresh store, or a new one built for a network that already has DAOs, misses
+# nothing. Without fromBlock it starts near the chain's head.
+if resume_checkpoint is None and int(network_file.get('fromBlock') or 0) > 0:
+    resume_checkpoint = int(network_file['fromBlock']) - 1
+    print(f"No checkpoint: indexing from the network's fromBlock {resume_checkpoint + 1}")
 if args.skip_historical:
     print("\n=== SKIPPING HISTORICAL SYNC (--skip-historical flag) ===")
 else:
@@ -288,6 +294,28 @@ for app_name in apps_to_run:
         sys.exit(1)
 
 import startup_cache
+
+# --- Agents: follow every jurisdiction's Substrate ---
+# Each jurisdiction with the autonet module records its Substrate in the registry; the DAO module keeps
+# those maps, so read them once here, and the main loop adds new ones live.
+def add_substrate_paper(address, dao):
+    dao_ref = app_data['homebase']['daos_collection'].document(dao)
+    if address in papers:
+        if getattr(papers[address], 'dao_ref', None) is None:
+            papers[address].dao_ref = dao_ref
+        return
+    from apps.agents.paper import Paper as AgentsPaper
+    papers[address] = AgentsPaper(address, web3, app_dbs['agents'], dao_ref=dao_ref)
+    if address not in listening_to_addresses:
+        listening_to_addresses.append(address)
+    print(f"[agents] Following Substrate {address} of DAO {dao}")
+
+if 'agents' in apps_to_run and 'homebase' in apps_to_run:
+    try:
+        for substrate, dao in app_modules['agents']['indexer'].jurisdiction_substrates(app_data['homebase']['daos_collection']):
+            add_substrate_paper(substrate, dao)
+    except Exception as e:
+        print(f"Warning: could not read jurisdiction Substrates: {e}")
 
 # Startup reads were shared through startup_cache; the main loop reads live
 startup_cache.clear()
@@ -409,7 +437,7 @@ while True:
                 checkpoint_block = resume_checkpoint
 
                 # Use checkpoint if available, otherwise start from latest - 15
-                if checkpoint_block is not None and checkpoint_block > 0:
+                if checkpoint_block is not None and checkpoint_block >= 0:
                     last_processed_block = checkpoint_block
                     print(f"Resuming from checkpoint. Starting from block {last_processed_block}.")
                 else:
@@ -513,6 +541,8 @@ while True:
                                 dao_address=item[2],
                             )})
                         print(f"Now listening to {len(listening_to_addresses)} addresses.")
+                    elif item[0] == 'substrate' and 'agents' in apps_to_run and 'homebase' in apps_to_run:
+                        add_substrate_paper(item[1], item[2])
                     elif item[0] == 'debate' and 'homebase' in apps_to_run:
                         # A new debate: follow its arguments, recorded under its DAO
                         debate_new = Web3.to_checksum_address(item[1])
