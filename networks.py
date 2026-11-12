@@ -2,13 +2,17 @@
 factories on that chain (trustless-contracts), read by the indexer at startup and by the supervisor
 to decide what to run.
 
-    NETWORKS_SOURCE=dir:networks          (default) files networks/<Name>.json
+    NETWORKS_SOURCE=dir:<root>            files <root>/networks/<Name>.json (default dir:., the repo)
     NETWORKS_SOURCE=r2:<bucket>           objects networks/<Name>.json in a PRIVATE bucket
+
+    python networks.py put <file>...      copies network files into NETWORKS_SOURCE, after checking them
+    python networks.py list               the networks NETWORKS_SOURCE has
 
 A network file is the network's contracts document: the same fields the apps read (rpc, chainId,
 jurisdictionFactory, moduleCatalog, moduleProcessor, nativeProject, erc20Project, debatesFactory,
-wrapper..., fromBlock), plus "name" (defaults to the file name). An RPC_<NAME> environment variable
-(name upper-cased, '-' as '_') overrides "rpc", so a keyed RPC URL never has to sit in a file.
+wrapper..., fromBlock), plus "name" (defaults to the file name). "rpc" is the public RPC URL the apps
+use: the file is published (networks.json). The indexer connects through RPC_<NAME> (name upper-cased,
+'-' as '_') when that is set, so a keyed RPC URL stays in the indexer's environment.
 
 The indexer copies the file into the store as contracts/<Name>, where its modules read it and the
 publisher lists it in networks.json; the indexer's checkpoint fields in that document are kept.
@@ -38,13 +42,19 @@ def _parse(path, raw):
         raise ValueError(f"{path}: name {name!r} differs from the file name")
     if not NAME_RE.match(name):
         raise ValueError(f"{path}: network name {name!r} does not match [A-Za-z0-9-]{{1,64}}")
-    rpc = os.getenv("RPC_" + name.upper().replace("-", "_"))
-    if rpc:
-        data["rpc"] = rpc
-    if not data.get("rpc"):
-        raise ValueError(f"{path}: no rpc (set it in the file or in RPC_{name.upper().replace('-', '_')})")
+    if not data.get("rpc") and not os.getenv(_rpc_var(name)):
+        raise ValueError(f"{path}: no rpc (set it in the file or in {_rpc_var(name)})")
     data["name"] = name
     return name, data
+
+
+def _rpc_var(name):
+    return "RPC_" + name.upper().replace("-", "_")
+
+
+def indexer_rpc(name, data):
+    """The RPC URL the indexer uses: RPC_<NAME> when set, else the file's public one."""
+    return os.getenv(_rpc_var(name)) or data["rpc"]
 
 
 def list_networks(target=None):
@@ -85,3 +95,25 @@ def sync_to_store(db, name, data):
         ref.set(new)
         return True
     return False
+
+
+def put(paths, target=None):
+    target = target or _target()
+    for p in paths:
+        with open(p, "rb") as f:
+            raw = f.read()
+        stem = os.path.basename(p)
+        name, _ = _parse(PREFIX + stem, raw)
+        target.put(f"{PREFIX}{name}.json", raw, "no-store")
+        print(f"{name}: {p} -> {os.getenv('NETWORKS_SOURCE', 'dir:.')} {PREFIX}{name}.json")
+
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) >= 3 and sys.argv[1] == "put":
+        put(sys.argv[2:])
+    elif sys.argv[1:] == ["list"]:
+        for n, d in list_networks().items():
+            print(f"{n}: chainId {d.get('chainId')}, fromBlock {d.get('fromBlock', 0)}, rpc {d.get('rpc')}")
+    else:
+        sys.exit("usage: python networks.py put <file>... | list")

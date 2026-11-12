@@ -91,7 +91,7 @@ except Exception as e:
     print(f"FATAL: {error_msg}")
     alert(error_msg)
     sys.exit(1)
-rpc = network_file['rpc']
+rpc = networks.indexer_rpc(args.network, network_file)
 
 DEFAULT_DOCSTORE = os.path.join("data", "werule.sqlite")
 docstore_path = os.getenv("DOCSTORE_PATH") or DEFAULT_DOCSTORE

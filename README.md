@@ -32,7 +32,7 @@ Environment: `DOCSTORE_PATH` (default `data/werule.sqlite`), `NETWORKS_SOURCE`, 
 ## Tests
 
 ```
-python -m pytest docstore publisher/tests
+python -m pytest docstore publisher/tests tests
 python -m publisher.tests.store_e2e --store <new file> --dir <empty dir>
 ```
 
