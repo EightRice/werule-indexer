@@ -20,7 +20,7 @@ Retire(string debate, bytes32 argument, uint64 nonce)
 ```
 
 - `debate`: the 16-hex id. `parent` / `argument`: an argument id, or `0x00…00` for the thesis.
-- An argument's id is its message digest: the EIP-712 hash (`keccak256("\x19\x01" ‖ domainSeparator ‖ structHash)`) of its `Argument` message.
+- An argument's id is its message digest: the EIP-712 hash (`keccak256("\x19\x01" ‖ domainSeparator ‖ structHash)`) of its `Argument` message. The digest does not cover the author, so the same fields signed by a second author (same text, parent, side, share and nonce) are rejected (`argument id taken`); a resend by the same author is a no-op.
 - `Argument`: a reply to `parent`, pro (`con = false`) or con. `bps` (0 to 10000) is the share of the author's voting power staked on it at once; 0 is allowed. `text`: 1 to 4096 bytes of UTF-8.
 - `Stake`: sets the author's share on `argument` (or the thesis) to `bps`; 0 withdraws it.
 - `Retire`: the author withdraws their own argument (only the author's). A retired argument and everything below it stop counting; all stakes on them are released.

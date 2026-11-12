@@ -31,7 +31,7 @@ except ImportError:
 # --- Argument Parsing ---
 parser = argparse.ArgumentParser(description="werule indexer: DAOs and their projects.")
 parser.add_argument('network', help="Network name: its file networks/<name>.json in NETWORKS_SOURCE (e.g. Localhost)")
-parser.add_argument('app', nargs='*', default=None, choices=['homebase', 'trustless', 'agents', 'all'], help="App(s) to index. One or more, or omit for 'all'.")
+parser.add_argument('app', nargs='*', default=None, choices=['homebase', 'trustless', 'agents', 'debates', 'all'], help="App(s) to index. One or more, or omit for 'all'.")
 
 parser.add_argument('--instance-id', type=str,
                     help="Instance name; an 'indexer-e2e' prefix guards the main local stack")
@@ -320,6 +320,10 @@ if 'agents' in apps_to_run and 'homebase' in apps_to_run:
 # Startup reads were shared through startup_cache; the main loop reads live
 startup_cache.clear()
 
+# --- Debates: a thread of their own (registry changes, the Worker's queued messages, tallies) ---
+if 'debates' in apps_to_run and 'homebase' in apps_to_run:
+    app_modules['debates']['indexer'].start(db, args.network, app_configs['debates'], network_file, alert)
+
 # --- Finalize Listener Setup ---
 listening_to_addresses = list(set([addr for addr in listening_to_addresses if addr]))
 print("\n--- Initializing with Monitored Event Signatures ---")
@@ -543,15 +547,6 @@ while True:
                         print(f"Now listening to {len(listening_to_addresses)} addresses.")
                     elif item[0] == 'substrate' and 'agents' in apps_to_run and 'homebase' in apps_to_run:
                         add_substrate_paper(item[1], item[2])
-                    elif item[0] == 'debate' and 'homebase' in apps_to_run:
-                        # A new debate: follow its arguments, recorded under its DAO
-                        debate_new = Web3.to_checksum_address(item[1])
-                        if debate_new not in listening_to_addresses: listening_to_addresses.append(debate_new)
-                        if debate_new not in papers:
-                            from apps.homebase.paper import Paper as HomebasePaper
-                            papers[debate_new] = HomebasePaper(address=debate_new, kind="debate",
-                                                               daos_collection=app_data['homebase']['daos_collection'],
-                                                               db=app_dbs['homebase'], web3=web3, dao=item[2])
                     elif item[0] == 'registry' and 'homebase' in apps_to_run:
                         # Registry for Economy DAO description updates
                         registry_address_new = Web3.to_checksum_address(item[1])

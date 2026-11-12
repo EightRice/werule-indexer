@@ -17,7 +17,7 @@ def test_first_start_publishes_and_notifies():
     ptr = t.json(f"{N}/d/{D}/ptr.json")
     head = t.json(f"{N}/o/{ptr['head']}.json")
     assert head["scope"] == f"dao:{N}:{D}" and head["doc"]["id"] == DAO
-    assert set(head["lists"]) == {"proposals", "members", "activity", "projects"}
+    assert set(head["lists"]) == {"proposals", "members", "activity", "projects", "debates"}
     assert head["lists"]["activity"]["count"] == 0 and head["nested"] == {}
     dao_msgs = [m for m in nt.msgs if m["channel"] == f"dao:{N}:{D}"]
     assert len(dao_msgs) == 1 and ptr["seq"] == dao_msgs[-1]["seq"]
@@ -61,7 +61,7 @@ def test_one_vote_one_message():
     assert ptr["seq"] == m["seq"] and ptr["head"] == m["head"]
     head = t.json(f"{N}/o/{m['head']}.json")
     assert head["nested"]["proposals/0/votes"]["count"] == 1
-    assert m["counts"] == {"proposals": 1, "members": 1, "activity": 0, "projects": 0}
+    assert m["counts"] == {"proposals": 1, "members": 1, "activity": 0, "projects": 0, "debates": 0}
     puts = t.puts()
     assert puts[-1] == f"{N}/d/{D}/ptr.json"   # pointer after objects
     assert not pub.due(pub.mono.t + 100)       # net scope untouched by a vote

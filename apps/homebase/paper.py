@@ -5,6 +5,7 @@ from activity import record_activity, format_units, short
 from datetime import datetime, timezone, timedelta
 from apps.homebase.entities import ProposalStatus, Proposal, StateInContract, Txaction, Token, Member, Org, Vote, balance_sort
 import re
+import time
 from web3 import Web3
 import docstore as firestore
 from docstore import FieldPath, NotFound, AlreadyExists
@@ -1280,6 +1281,20 @@ class Paper:
         shown = value if len(value) <= 60 else value[:57] + '...'
         self._activity(log, 'registryEdit', f"Set {key} to {shown}" if value else f"Cleared {key}")
 
+        # A debate opened or retired (DEBATES.md section 1): noted for the debates module, which resolves
+        # it to the proposal executed in the same transaction once that is indexed (it is logged later)
+        if key.startswith('debates.') and re.match(r'^[0-9a-f]{16}$', key[len('debates.'):]):
+            txh = log['transactionHash'].hex()
+            txh = txh if txh.startswith('0x') else '0x' + txh
+            try:
+                self.db.collection('debate_registry').document(
+                    f"{self.daos_collection.id}|{txh}|{int(log['logIndex'])}").create({
+                        'network': self.daos_collection.id, 'dao': self.dao, 'debate': key[len('debates.'):],
+                        'value': value, 'txHash': txh, 'blockNumber': int(log['blockNumber']),
+                        'logIndex': int(log['logIndex']), 'seenAt': time.time(), 'done': False})
+            except AlreadyExists:
+                pass  # a replayed log
+
         # If key is 'description', update the DAO's description field
         if key == 'description':
             try:
@@ -1433,58 +1448,6 @@ class Paper:
             print(f"Error updating proposal {proposal_id} on cancel in DAO {self.dao}: {e}")
         return None
 
-    # ---- Debates (DebatesFactory and each Debate) ----
-
-    def debate_created(self, log):
-        """DebatesFactory.DebateCreated: record the debate under the DAO whose token it is for, and
-        return it so the main loop follows its arguments."""
-        topics = log['topics']
-        debate = Web3.to_checksum_address('0x' + bytes(topics[1])[-20:].hex())
-        token = Web3.to_checksum_address('0x' + bytes(topics[2])[-20:].hex())
-        creator = Web3.to_checksum_address('0x' + bytes(topics[3])[-20:].hex())
-        from eth_abi import decode
-        title, _ = decode(['string', 'uint256'], bytes(log['data']))
-        dao = None
-        for candidate in (token, token.lower()):
-            for doc in self.daos_collection.where('token', '==', candidate).limit(1).stream():
-                dao = doc.id
-            if dao:
-                break
-        if dao is None:
-            print(f"DebateCreated for token {token}, which no indexed DAO has; skipping")
-            return None
-        self.daos_collection.document(dao).collection('debates').document(debate.lower()).set({
-            'address': debate, 'title': title, 'creator': creator, 'token': token,
-            'createdAt': self._block_time(log),
-        })
-        self._activity(log, 'debateCreated', f"Opened the debate {title}", dao=dao, actor=creator,
-                       target_kind='debate', target_id=debate, target_label=title)
-        return [('debate', debate, dao)]
-
-    def _debate_title(self):
-        if not hasattr(self, '_title'):
-            snap = self.daos_collection.document(self.dao).collection('debates').document(self.address.lower()).get()
-            self._title = (snap.to_dict() or {}).get('title', '') if snap.exists else ''
-        return self._title
-
-    def debate_event(self, log, func):
-        from eth_abi import decode
-        topics, data = log['topics'], bytes(log['data'])
-        title = self._debate_title()
-        target = dict(target_kind='debate', target_id=self.address, target_label=title)
-        if func == 'ArgumentAdded':
-            author = Web3.to_checksum_address('0x' + bytes(topics[3])[-20:].hex())
-            arg_type, _, content = decode(['uint8', 'uint256', 'string'], data)
-            shown = content if len(content) <= 80 else content[:77] + '...'
-            self._activity(log, 'debateArgument', f"Argued {'con' if arg_type == 1 else 'pro'}: {shown}", actor=author, **target)
-        elif func == 'WeightAdded':
-            argument = int.from_bytes(bytes(topics[1]), 'big')
-            contributor = Web3.to_checksum_address('0x' + bytes(topics[2])[-20:].hex())
-            self._activity(log, 'debateWeight', f"Backed argument #{argument}", actor=contributor, **target)
-        elif func == 'DebateClosed':
-            self._activity(log, 'debateClosed', "Closed the debate", **target)
-        return None
-
     def handle_event(self, log, func=None):
         # Debug logging
         print(f"[DEBUG handle_event] kind={self.kind}, func={func}, address={self.address}")
@@ -1533,11 +1496,5 @@ class Paper:
         elif self.kind == "registry":
             if func == "RegistryUpdated":
                 return self.registry_updated(log)
-        elif self.kind == "debates_factory":
-            if func == "DebateCreated":
-                return self.debate_created(log)
-        elif self.kind == "debate":
-            if func in ("ArgumentAdded", "WeightAdded", "DebateClosed"):
-                return self.debate_event(log, func)
         return None
 # apps/homebase/paper.py

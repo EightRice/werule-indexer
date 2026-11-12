@@ -414,14 +414,6 @@ def run_historical_sync(db, web3, network_config, alert_func):
             if changed:
                 startup_cache.invalidate(db, ('daos', daos_collection.id))
 
-            # Debates, which the DAO scan above doesn't cover
-            try:
-                _sync_debates(db, web3, daos_collection, homebase_contracts_config.get('debatesFactory'),
-                              start_block, latest_block)
-            except Exception as e:
-                print(f"ERROR syncing debates: {e}")
-                raise
-
             # Update lastSyncedBlock in contracts collection
             homebase_contracts_ref.update({'lastSyncedBlock': latest_block})
             print(f"--- Homebase Historical Sync Complete --- Checkpoint updated to block {latest_block}.")
@@ -432,58 +424,6 @@ def run_historical_sync(db, web3, network_config, alert_func):
         import traceback
         traceback.print_exc()
         alert_func(error_msg)
-
-
-def _debate_papers(db, web3, daos_collection, factory):
-    """The debates factory, and every debate recorded under one of this network's DAOs
-    ({daos}/{dao}/debates/{debate}, written when the factory's DebateCreated was indexed)."""
-    papers = {}
-    if not factory:
-        return papers
-    factory = Web3.to_checksum_address(factory)
-    papers[factory] = HomebasePaper(address=factory, kind="debates_factory", daos_collection=daos_collection, db=db, web3=web3)
-    for doc in startup_cache.subcollection_docs(db, daos_collection.id, 'debates'):
-        dao_ref = doc.reference.parent.parent
-        address = Web3.to_checksum_address(doc.id)
-        papers[address] = HomebasePaper(address=address, kind="debate", daos_collection=daos_collection, db=db,
-                                        web3=web3, dao=dao_ref.id)
-    return papers
-
-
-def _sync_debates(db, web3, daos_collection, factory, from_block, to_block):
-    """Phase 3 of the historical sync: debates and their arguments, oldest first."""
-    from apps.homebase.config import EVENT_SIGNATURES, DEBATE_EVENTS
-    papers = _debate_papers(db, web3, daos_collection, factory)
-    if not papers:
-        return
-    names = {}
-    for sig in EVENT_SIGNATURES:
-        name = sig.split('(')[0]
-        if name in DEBATE_EVENTS:
-            names[web3.keccak(text=sig).hex().removeprefix('0x')] = name
-    print(f"\n--- Phase 3: Syncing {len(papers) - 1} debates and the debates factory ---")
-    block = from_block
-    while block <= to_block:
-        end = min(block + 499, to_block)
-        logs = sorted(web3.eth.get_logs({'fromBlock': block, 'toBlock': end, 'address': list(papers.keys())}),
-                      key=lambda l: (l['blockNumber'], l['transactionIndex'], l['logIndex']))
-        for log in logs:
-            name = names.get(log['topics'][0].hex().removeprefix('0x')) if log['topics'] else None
-            paper = papers.get(Web3.to_checksum_address(log['address']))
-            if not name or not paper:
-                continue
-            result = paper.handle_event(log, func=name)
-            for item in result or []:
-                if item[0] == 'debate' and item[1] not in papers:
-                    startup_cache.invalidate(db, ('group', daos_collection.id, 'debates'))
-                    papers[item[1]] = HomebasePaper(address=item[1], kind="debate", daos_collection=daos_collection,
-                                                    db=db, web3=web3, dao=item[2])
-                    # Its root argument was emitted earlier in the same block range
-                    for early in web3.eth.get_logs({'fromBlock': log['blockNumber'], 'toBlock': end, 'address': item[1]}):
-                        early_name = names.get(early['topics'][0].hex().removeprefix('0x')) if early['topics'] else None
-                        if early_name:
-                            papers[item[1]].handle_event(early, func=early_name)
-        block = end + 1
 
 
 BALANCE_SORT_FLAG = 'membersBalanceSort'
@@ -650,11 +590,6 @@ def setup_papers(db, web3, network_config):
                 )
                 papers[registry_address] = registry_paper
                 print(f"Added registry paper for DAO {dao_address[:10]}... at {registry_address}")
-
-    # Debates: the factory and every debate already recorded under a DAO
-    debate_papers = _debate_papers(db, web3, daos_collection, homebase_config.get('debatesFactory'))
-    papers.update(debate_papers)
-    addresses.extend(debate_papers.keys())
 
     return {
         'addresses': addresses,

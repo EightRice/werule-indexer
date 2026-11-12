@@ -118,5 +118,8 @@ def test_classify():
     p = classify(f"{C}/{a}/projects/{a}/backers/x", C)[0]
     assert p.list_key == f"projects/{a.lower()}/backers" and p.spec is NESTED[("projects", "backers")]
     assert classify(f"{C}/{a}/projects/{a}/activity/t_1", C)[0].list_key.endswith("/activity")
-    assert classify(f"{C}/{a}/debates/1", C)[0] is None
+    assert classify(f"{C}/{a}/debates/0123456789abcdef", C)[0].list_key == "debates"
+    assert classify(f"{C}/{a}/debates/0123456789abcdef/arguments/0x1", C)[0].list_key == "debates/0123456789abcdef/arguments"
+    assert classify(f"{C}/{a}/debates/0123456789abcdef/messages/0x1", C)[0].list_key == "debates/0123456789abcdef/messages"
+    assert classify(f"{C}/{a}/elsewhere/1", C)[0] is None
     assert classify(f"idaosY/{a}", C)[0] is None

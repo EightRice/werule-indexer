@@ -26,11 +26,14 @@ TOP_LISTS = {
     "members": ListSpec("members", ID_ORDER, "asc", "prefix", 400, ("top",)),
     "activity": ListSpec("activity", "time", "desc", "rank", 100),
     "projects": ListSpec("projects", "createdAt", "desc", "rank", 50, ("loc",)),
+    "debates": ListSpec("debates", "openedAt", "desc", "rank", 50, ("loc",)),
 }
 NESTED = {
     ("proposals", "votes"): ListSpec("votes", "cast", "desc", "rank", 200),
     ("projects", "backers"): ListSpec("backers", ID_ORDER, "asc", "rank", 200),
     ("projects", "activity"): ListSpec("activity", "time", "desc", "rank", 100),
+    ("debates", "arguments"): ListSpec("arguments", "createdAt", "asc", "rank", 200),
+    ("debates", "messages"): ListSpec("messages", "acceptedAt", "asc", "rank", 200),
 }
 DOC = "__doc__"  # list key of the DAO doc inside its own scope
 
