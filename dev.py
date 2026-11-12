@@ -83,7 +83,8 @@ def main(argv=None):
         procs.append((name, p))
         print(f"{name}: pid {p.pid}, log {f.name}")
 
-    start("worker", f"npm run {worker_script}", cwd=worker_dir, shell=True)
+    # The local Worker checks debate messages against the local networks.json, not production's
+    start("worker", f"npm run {worker_script} -- --var DATA_URL:http://127.0.0.1:{data_port}", cwd=worker_dir, shell=True)
     start("serve", [sys.executable, "-u", "-m", "publisher.serve", "--dir", out, "--port", str(data_port)])
     time.sleep(3)  # the Worker takes a moment; a publisher's early notifies are retried anyway
     start("supervisor", [sys.executable, "-u", "supervisor.py", "--target", f"dir:{out}", "--poll", str(a.poll)])
