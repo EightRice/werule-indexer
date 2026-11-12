@@ -126,8 +126,9 @@ class Notifier:
             return False
         body = body_bytes([m.raw for m in batch])
         ts = int(self.clock())
-        headers = {"Content-Type": "application/json", "X-Edge-Timestamp": str(ts),
-                   "X-Edge-Signature": sign(self.secret, ts, body)}
+        # A named User-Agent: Cloudflare refuses Python's default one (error 1010) before the Worker sees it
+        headers = {"Content-Type": "application/json", "User-Agent": "werule-publisher/1.0",
+                   "X-Edge-Timestamp": str(ts), "X-Edge-Signature": sign(self.secret, ts, body)}
         status, resp = None, b""
         try:
             status, resp = self.post(self.url, body, headers)
