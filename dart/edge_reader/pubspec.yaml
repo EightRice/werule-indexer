@@ -1,0 +1,19 @@
+name: edge_reader
+description: Reads the werule indexer's published files (networks, DAOs, proposals, projects) and live pushes.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.4.0
+  web_socket_channel: ^3.0.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  fake_async: ^1.3.1
+  flutter_lints: ^3.0.1
