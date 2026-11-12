@@ -23,12 +23,12 @@ def initialize(db, web3, network_config):
     """
     doc_name = network_config['firestore_doc_name']
 
-    # Get Homebase config from Firestore
+    # The network's contracts doc (its network file, copied into the store)
     homebase_networks = db.collection("contracts")
     homebase_doc = homebase_networks.document(doc_name).get()
 
     if not homebase_doc.exists:
-        raise Exception(f"Homebase config document '{doc_name}' not found in Firestore")
+        raise Exception(f"Homebase config document '{doc_name}' not found in the store")
 
     homebase_config = homebase_doc.to_dict()
     # Load all wrapper types
@@ -72,7 +72,7 @@ def run_historical_sync(db, web3, network_config, alert_func):
     Scans for DAO events and syncs proposal/member/vote state.
 
     Args:
-        db: Firestore database client
+        db: the document store client
         web3: Web3 instance
         network_config: Network configuration dict
         alert_func: Function to call for alerts
@@ -235,7 +235,7 @@ def run_historical_sync(db, web3, network_config, alert_func):
             # The DAOs, including any found above (read once and shared with the other apps' startup)
             daos_in_db = startup_cache.dao_docs(daos_collection)
             changed = False
-            print(f"Found {len(daos_in_db)} DAOs in Firestore to sync.")
+            print(f"Found {len(daos_in_db)} DAOs in the store to sync.")
 
             # Adaptive chunk size - start conservative and learn what works
             # This is shared across all DAOs so we don't retry failed sizes
@@ -528,12 +528,12 @@ def setup_papers(db, web3, network_config):
         dict with:
             - addresses: list - Addresses to listen to (wrappers + all DAOs + tokens)
             - papers: dict - Paper objects mapped by address
-            - daos_collection: Firestore collection reference
+            - daos_collection: the DAO collection reference
     """
     doc_name = network_config['firestore_doc_name']
     dao_collection_name = network_config['dao_collection_name']
 
-    # Get wrapper addresses from Firestore
+    # Wrapper addresses from the network's contracts doc
     homebase_doc = db.collection("contracts").document(doc_name).get()
     if not homebase_doc.exists:
         raise Exception(f"Homebase config document '{doc_name}' not found")

@@ -3,32 +3,7 @@
 
 APP_NAME = "homebase"
 
-# Firebase credentials file path (relative to indexer root)
-FIREBASE_CREDENTIALS = "homebase.json"
-
-# Network-specific configurations
-NETWORKS = {
-    "mainnet": {
-        "firestore_doc_name": "Etherlink",
-        "dao_collection_name": "idaosEtherlink",
-    },
-    "testnet": {
-        "firestore_doc_name": "Etherlink-Testnet",
-        "dao_collection_name": "idaosEtherlink-Testnet",
-    },
-    "shadownet": {
-        "firestore_doc_name": "Etherlink-Shadownet",
-        "dao_collection_name": "idaosEtherlink-Shadownet",
-    },
-    "localhost": {
-        "firestore_doc_name": "Localhost",
-        "dao_collection_name": "idaosLocalhost",
-    },
-    "base-sepolia": {
-        "firestore_doc_name": "Base-Sepolia",
-        "dao_collection_name": "idaosBase-Sepolia",
-    },
-}
+# Networks come from their files (networks.py); this module only lists the events.
 
 # Event signatures that this app listens for
 EVENT_SIGNATURES = [

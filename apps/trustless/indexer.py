@@ -1,6 +1,6 @@
 # apps/trustless/indexer.py
 #
-# Economy projects live in the homebase Firestore, under the DAO each Economy belongs to:
+# Economy projects live in the store, under the DAO each Economy belongs to:
 #   {daos_collection}/{dao}/projects/{project}       project document (lowercase address as ID)
 #       backers/{backer}                             one per backer
 #       activity/{txHash}_{logIndex}                 every indexed transaction on the project

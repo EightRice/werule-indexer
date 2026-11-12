@@ -6,9 +6,8 @@ from datetime import datetime, timezone, timedelta
 from apps.homebase.entities import ProposalStatus, Proposal, StateInContract, Txaction, Token, Member, Org, Vote, balance_sort
 import re
 from web3 import Web3
-from google.cloud import firestore
-from google.cloud.firestore_v1.field_path import FieldPath
-from google.api_core.exceptions import NotFound, AlreadyExists
+import docstore as firestore
+from docstore import FieldPath, NotFound, AlreadyExists
 import codecs
 from apps.generic.converting import decode_function_parameters
 from apps.homebase.eventSignatures import quorum_function_abi, voting_period_function_abi,proposal_threshold_function_abi, voting_delay_function_abi, mint_function_abi, burn_function_abi

@@ -8,7 +8,7 @@ from web3 import Web3
 from apps.trustless.abis import economyAbi, projectAbi, projectReadAbi
 from apps.trustless.entities import Project, Transaction, Stage, ZERO_ADDRESS
 from activity import record_activity
-from google.api_core.exceptions import AlreadyExists
+from docstore import AlreadyExists
 
 # How a project event reads in the DAO's activity feed, before the project's name
 FEED_PHRASES = {

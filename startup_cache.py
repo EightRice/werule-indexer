@@ -31,8 +31,7 @@ def subcollection_docs(db, daos_collection_id, name):
 
 
 def _network_group(db, daos_collection_id, name):
-    from google.cloud.firestore_v1.field_path import FieldPath
-    from google.cloud.firestore_v1.base_query import FieldFilter
+    from docstore import FieldPath, FieldFilter
     group = db.collection_group(name)
     try:
         # Paths order segment by segment, so this network's documents lie between these bounds

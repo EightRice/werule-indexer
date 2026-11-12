@@ -1,5 +1,5 @@
 web3
-firebase-admin
 pyyaml
 python-dotenv
 boto3
+pytest

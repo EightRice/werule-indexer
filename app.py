@@ -16,7 +16,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # --- Imports (Heavy/Custom Libraries After .env is loaded) ---
-# NOTE: firebase_admin import is delayed until after FIRESTORE_EMULATOR_HOST is set
 from web3 import Web3
 from web3.exceptions import Web3RPCError
 
@@ -31,7 +30,7 @@ except ImportError:
 
 # --- Argument Parsing ---
 parser = argparse.ArgumentParser(description="werule indexer: DAOs and their projects.")
-parser.add_argument('network', choices=['mainnet', 'testnet', 'shadownet', 'localhost', 'base-sepolia'], help="The network to run.")
+parser.add_argument('network', help="Network name: its file networks/<name>.json in NETWORKS_SOURCE (e.g. Localhost)")
 parser.add_argument('app', nargs='*', default=None, choices=['homebase', 'trustless', 'all'], help="App(s) to index. One or more, or omit for 'all'.")
 
 parser.add_argument('--instance-id', type=str,
@@ -81,110 +80,59 @@ else:
 
 print(f"--- Indexer starting for Network: {args.network.upper()}, App(s): {', '.join(apps_to_run).upper()} ---")
 
-# --- Network Config ---
-if args.network == 'mainnet':
-    default_rpc = "https://node.mainnet.etherlink.com"
-elif args.network == 'testnet':
-    default_rpc = "https://node.ghostnet.etherlink.com"
-elif args.network == 'shadownet':
-    default_rpc = "https://node.shadownet.etherlink.com"
-elif args.network == 'localhost':
-    default_rpc = os.getenv("LOCAL_RPC_URL") or "http://127.0.0.1:8545"  # Hardhat node; the e2e harness points it elsewhere
-    # Set Firestore emulator host for localhost (matches Flutter apps' local test mode). The e2e
-    # harness may point a second instance at another emulator; it can never be unset here.
-    os.environ["FIRESTORE_EMULATOR_HOST"] = os.getenv("LOCAL_FIRESTORE_EMULATOR_HOST") or "127.0.0.1:8080"
-    print(f"Using Firestore emulator at {os.environ['FIRESTORE_EMULATOR_HOST']}")
-    # An e2e instance must never touch the owner's local stack (hardhat 8545, emulator 8080)
-    if (args.instance_id or "").startswith("indexer-e2e") and (
-            default_rpc.rstrip("/").endswith(":8545") or os.environ["FIRESTORE_EMULATOR_HOST"].endswith(":8080"))             and os.getenv("E2E_ALLOW_MAIN_STACK") != "1":
-        print("FATAL: e2e indexer pointed at the main local stack (8545/8080); set LOCAL_RPC_URL and LOCAL_FIRESTORE_EMULATOR_HOST")
-        sys.exit(2)
-elif args.network == 'base-sepolia':
-    default_rpc = "https://base-sepolia-rpc.publicnode.com"
-else:
-    error_msg = f"Invalid network '{args.network}' specified."
+# --- Network: its file, copied into the store ---
+import networks
+import docstore
+
+try:
+    network_file = networks.load(args.network)
+except Exception as e:
+    error_msg = f"Could not load network '{args.network}': {e}"
     print(f"FATAL: {error_msg}")
     alert(error_msg)
     sys.exit(1)
+rpc = network_file['rpc']
 
-rpc = default_rpc
-
-# --- Import Firebase AFTER setting emulator host for localhost ---
-from firebase_admin import initialize_app, firestore, credentials
+DEFAULT_DOCSTORE = os.path.join("data", "werule.sqlite")
+docstore_path = os.getenv("DOCSTORE_PATH") or DEFAULT_DOCSTORE
+# An e2e instance must never touch the owner's local stack (hardhat on 8545, the default store)
+if ((args.instance_id or "").startswith("indexer-e2e") and os.getenv("E2E_ALLOW_MAIN_STACK") != "1"
+        and os.path.abspath(docstore_path) == os.path.abspath(DEFAULT_DOCSTORE)):
+    print("FATAL: e2e indexer pointed at the main local store; set DOCSTORE_PATH")
+    sys.exit(2)
+db = docstore.Client(docstore_path)
+print(f"Document store: {os.path.abspath(docstore_path)}")
+if networks.sync_to_store(db, args.network, network_file):
+    print(f"Network file {args.network} copied into contracts/{args.network}")
 
 # --- Dynamic App Loading ---
 app_modules = {}  # Store loaded app modules
-app_dbs = {}  # Store Firebase DB clients per app
+app_dbs = {}  # The store client each app writes through (one store for all)
 app_configs = {}  # Store app network configs
 
 for app_name in apps_to_run:
     try:
         print(f"\n--- Loading app: {app_name} ---")
-
-        # Import app config and indexer modules
         app_config_module = importlib.import_module(f'apps.{app_name}.config')
         app_indexer_module = importlib.import_module(f'apps.{app_name}.indexer')
-
         app_modules[app_name] = {
             'config': app_config_module,
             'indexer': app_indexer_module
         }
-
-        # Get network-specific config
-        if args.network not in app_config_module.NETWORKS:
-            error_msg = f"Network '{args.network}' not found in {app_name} config"
-            print(f"FATAL: {error_msg}")
-            alert(error_msg)
-            sys.exit(1)
-
-        network_config = app_config_module.NETWORKS[args.network]
+        network_config = networks.collections(args.network)
+        if getattr(app_config_module, 'CHECKPOINT_FIELD', None):
+            network_config['checkpoint_field'] = app_config_module.CHECKPOINT_FIELD
         app_configs[app_name] = network_config
-        print(f"Network config for {app_name}: {network_config}")
-
-        # Initialize Firebase for this app
-        cred_path = app_config_module.FIREBASE_CREDENTIALS
-        cred = credentials.Certificate(cred_path)
-
-        # Use unique app name for Firebase, or 'default' if it's the only app
-        firebase_app_name = f'{app_name}App' if len(apps_to_run) > 1 else 'default'
-        firebase_app = initialize_app(cred, name=firebase_app_name)
-        db = firestore.client(app=firebase_app)
         app_dbs[app_name] = db
-
-        print(f"Firebase app '{firebase_app_name}' for {app_name} initialized.")
-
+        print(f"Network config for {app_name}: {network_config}")
     except Exception as e:
-        error_msg = f"Could not load or initialize app '{app_name}': {e}"
+        error_msg = f"Could not load app '{app_name}': {e}"
         print(f"FATAL: {error_msg}")
         traceback.print_exc()
         alert(error_msg)
         sys.exit(1)
 
-# --- Fetch RPC from Firestore (check all apps, first one with RPC wins) ---
-for app_name in apps_to_run:
-    db = app_dbs[app_name]
-    network_config = app_configs[app_name]
-    doc_name = network_config.get('firestore_doc_name')
-
-    if doc_name:
-        try:
-            # Try to get RPC from contracts collection first, then networks
-            for collection_name in ['contracts', 'networks']:
-                doc_ref = db.collection(collection_name).document(doc_name)
-                doc = doc_ref.get()
-                if doc.exists:
-                    config_dict = doc.to_dict()
-                    rpc_from_fs = config_dict.get('rpc')
-                    if rpc_from_fs:
-                        print(f"Using RPC from {app_name} Firestore: {rpc_from_fs}")
-                        rpc = rpc_from_fs
-                        break
-            if rpc != default_rpc:
-                break  # Found an RPC, stop checking other apps
-        except Exception as e:
-            print(f"Warning: Could not fetch RPC from {app_name} Firestore: {e}")
-
-# Same guard on the final RPC, which the network's Firestore doc may have set
+# The main local chain is off limits to e2e instances too
 if ((args.instance_id or "").startswith("indexer-e2e") and rpc.rstrip("/").endswith(":8545")
         and os.getenv("E2E_ALLOW_MAIN_STACK") != "1"):
     print(f"FATAL: e2e indexer would read the main local chain ({rpc})")
@@ -232,9 +180,9 @@ for app_name in apps_to_run:
         sys.exit(1)
 
 # --- Sync checkpoints ---
-# Each app keeps its own checkpoint in contracts/<network doc> of its Firestore, in the field its
-# network config names (lastSyncedBlock by default; apps sharing a Firestore use their own field),
-# so every app's checkpoint stays meaningful. On resume we take the lowest, so no app misses events.
+# Each app keeps its own checkpoint in the store's contracts/<network> doc, in the field its network
+# config names (lastSyncedBlock by default, projectsLastSyncedBlock for projects), so every app's
+# checkpoint stays meaningful. On resume we take the lowest, so no app misses events.
 def _checkpoint_refs():
     refs = []
     for name in apps_to_run:
@@ -258,7 +206,7 @@ def read_checkpoint():
     return min(blocks) if blocks else None
 
 def write_checkpoint(block):
-    # Apps sharing a Firestore keep their fields in the same doc: one write per doc
+    # Both apps keep their fields in the same doc: one write per doc
     by_doc = {}
     for name, ref, field in _checkpoint_refs():
         entry = by_doc.setdefault((id(ref._client), ref.path), [ref, [], {}])
@@ -368,9 +316,9 @@ PROPOSAL_CREATED_TYPES = ["uint256", "address", "address[]", "uint256[]", "strin
 
 # Registers DAO proposals on the projects they veto or overrule, so the project holds signing and
 # finalizing until the proposal resolves. Anyone may register; this is the automatic path. The key
-# only pays gas: INDEXER_RELAYER_KEY, or on localhost hardhat's public account #9.
+# only pays gas: INDEXER_RELAYER_KEY, or on a local hardhat chain (31337) its public account #9.
 HARDHAT_ACCOUNT_9 = "0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6"
-relayer_key = os.getenv("INDEXER_RELAYER_KEY") or (HARDHAT_ACCOUNT_9 if args.network == "localhost" else None)
+relayer_key = os.getenv("INDEXER_RELAYER_KEY") or (HARDHAT_ACCOUNT_9 if int(network_file.get("chainId") or 0) == 31337 else None)
 if not relayer_key:
     print("No INDEXER_RELAYER_KEY: DAO proposals won't be registered on projects automatically")
 
@@ -438,7 +386,7 @@ BLOCK_HEADROOM = 3  # Query logs 3 blocks behind the head of the chain for safet
 APPEAL_CHECK_SECONDS = 30  # between checks of open appeal proposals
 last_appeal_check = 0
 MAX_BLOCK_RANGE = 500 # Process a maximum of 500 blocks at a time to not overload the RPC
-CHECKPOINT_INTERVAL = 60  # seconds between Firestore checkpoint writes
+CHECKPOINT_INTERVAL = 60  # seconds between checkpoint writes
 last_checkpoint_write = 0
 
 while True:

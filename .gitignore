@@ -23,3 +23,7 @@ publisher/worker/node_modules/
 publisher/worker/.wrangler/
 publisher/worker/.dev.vars
 .pytest_cache/
+
+# local document store and network files (written by deploys)
+data/
+networks/

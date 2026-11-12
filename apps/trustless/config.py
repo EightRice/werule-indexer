@@ -2,42 +2,12 @@
 
 APP_NAME = "trustless"
 
-# Projects are written to the homebase Firestore, under the DAO their Economy belongs to:
-# {dao_collection_name}/{dao}/projects/{project}, next to the DAO's proposals and debates.
-FIREBASE_CREDENTIALS = "homebase.json"
+# Projects are written under the DAO their Economy belongs to: {dao_collection}/{dao}/projects/{project},
+# next to the DAO's proposals and debates.
 
-# The checkpoint lives in the homebase contracts/{firestore_doc_name} doc, in its own field: the
-# homebase app's historical sync advances lastSyncedBlock on its own.
+# The checkpoint lives in the network's contracts/{network} doc, in its own field: the DAO module's
+# historical sync advances lastSyncedBlock on its own.
 CHECKPOINT_FIELD = "projectsLastSyncedBlock"
-
-# Network-specific configurations
-NETWORKS = {
-    "mainnet": {
-        "firestore_doc_name": "Etherlink",
-        "dao_collection_name": "idaosEtherlink",
-        "checkpoint_field": CHECKPOINT_FIELD,
-    },
-    "testnet": {
-        "firestore_doc_name": "Etherlink-Testnet",
-        "dao_collection_name": "idaosEtherlink-Testnet",
-        "checkpoint_field": CHECKPOINT_FIELD,
-    },
-    "shadownet": {
-        "firestore_doc_name": "Etherlink-Shadownet",
-        "dao_collection_name": "idaosEtherlink-Shadownet",
-        "checkpoint_field": CHECKPOINT_FIELD,
-    },
-    "localhost": {
-        "firestore_doc_name": "Localhost",
-        "dao_collection_name": "idaosLocalhost",
-        "checkpoint_field": CHECKPOINT_FIELD,
-    },
-    "base-sepolia": {
-        "firestore_doc_name": "Base-Sepolia",
-        "dao_collection_name": "idaosBase-Sepolia",
-        "checkpoint_field": CHECKPOINT_FIELD,
-    },
-}
 
 # Economy contract event signatures
 ECONOMY_EVENT_SIGNATURES = [

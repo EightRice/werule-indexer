@@ -1,7 +1,7 @@
-"""Acceptance checks against a Firestore emulator (never the main stack on 8080).
+"""Acceptance checks against a scratch document store (never the main data/werule.sqlite).
 
-Run from C:\\code\\DAO\\indexer:
-  python -m publisher.tests.emulator_e2e --emulator 127.0.0.1:8081 --dir <empty dir> [--stub-port 8796]
+Run from the repo root:
+  python -m publisher.tests.store_e2e --store <new .sqlite file> --dir <empty dir> [--stub-port 8796]
 Seeds idaosLocalhost, runs "python -m publisher" as a subprocess with a local notify stub, and checks
 CONTRACT.md section 12 (publisher items).
 """
@@ -99,7 +99,7 @@ def ts(days=0, hours=0):
 
 
 def seed(db):
-    from google.cloud import firestore as gf
+    import docstore as gf
     db.collection("contracts").document("Localhost").set({
         "wrapper": "0x60E813F889c4c29eB4FB8614fa37fFA7587e305B", "wrapper_trustless": "0xd3aDda8626C18ec4E85985cc6B489d96D836C07f",
         "rpc": "http://127.0.0.1:8546", "lastSyncedBlock": 10, "projectsLastSyncedBlock": 10})
@@ -142,7 +142,7 @@ def seed(db):
 
 def vote(db, dao, pid, voter):
     """Shaped like homebase/paper.py update_proposal_votes: one transaction."""
-    from google.cloud import firestore as gf
+    import docstore as gf
     d = db.collection(C).document(dao)
     t = db.transaction()
 
@@ -160,7 +160,7 @@ class Pub:
     def __init__(self, root, env, log_path):
         self.log_path = log_path
         self.f = open(log_path, "w")
-        self.p = subprocess.Popen([sys.executable, "-m", "publisher", "--network", "localhost", "--networks-index",
+        self.p = subprocess.Popen([sys.executable, "-m", "publisher", "--network", N, "--networks-index",
                                    "--target", f"dir:{root}"], env=env, stdout=self.f, stderr=subprocess.STDOUT)
 
     def wait_line(self, needle, timeout=90):
@@ -182,22 +182,22 @@ class Pub:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--emulator", required=True)
+    ap.add_argument("--store", required=True, help="a new store file for this run")
     ap.add_argument("--dir", required=True)
     ap.add_argument("--stub-port", type=int, default=8796)
     ap.add_argument("--skip-outage", action="store_true")
     a = ap.parse_args()
-    if a.emulator.endswith(":8080"):
-        sys.exit("refusing the main local stack emulator (8080)")
-    os.environ["FIRESTORE_EMULATOR_HOST"] = a.emulator
-    from firebase_admin import initialize_app, firestore, credentials
-    db = firestore.client(app=initialize_app(credentials.Certificate("homebase.json"), name="e2e"))
+    store = os.path.abspath(a.store)
+    if store == os.path.abspath(os.path.join("data", "werule.sqlite")) or os.path.exists(store):
+        sys.exit("--store must be a new file, not the main local store")
+    import docstore
+    db = docstore.Client(store)
     root = os.path.abspath(a.dir)
     os.makedirs(root, exist_ok=True)
     assert not os.listdir(root), "--dir must be empty"
     seed(db)
     stub = Stub(a.stub_port, root)
-    env = dict(os.environ, NOTIFY_URL=f"http://127.0.0.1:{a.stub_port}/notify", NOTIFY_SECRET=SECRET,
+    env = dict(os.environ, DOCSTORE_PATH=store, NOTIFY_URL=f"http://127.0.0.1:{a.stub_port}/notify", NOTIFY_SECRET=SECRET,
                PUBLISHER_LOG_LEVEL="INFO", PYTHONUNBUFFERED="1")
     results = []
 
@@ -255,7 +255,7 @@ def main():
     check("pointer seq equals message seq", dao1 and ptr1["seq"] == dao1[-1]["seq"])
 
     # 4. backer deleted, DAO doc field deleted: delete entry and net push
-    from google.cloud import firestore as gf
+    import docstore as gf
     db.collection(C).document(DAO2).collection("projects").document(PROJECT).collection("backers").document(BACKERS[1]).delete()
     db.collection(C).document(DAO2).update({"economy": gf.DELETE_FIELD})
     time.sleep(5)
