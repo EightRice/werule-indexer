@@ -9,4 +9,7 @@ BPS = 10000              # a share of voting power, in basis points
 MAX_TEXT_BYTES = 4096    # an argument's text, UTF-8
 MAX_OPEN = 20            # open debates per DAO
 DAILY_QUOTA = 2000       # accepted messages per DAO per day (UTC)
-POLL_SECONDS = 2         # between reads of the Worker queue
+POLL_SECONDS = 2         # between ticks (registry changes, tallies)
+QUEUE_POLL_SECONDS = 30  # between reads of the Worker queue while it is empty: each read is a Worker
+                         # request and a Durable Object request, and the account's free caps are
+                         # 100k a day each, shared by every network's indexer

@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from web3 import Web3
 
 from apps.debates import eip712
-from apps.debates.config import BPS, DAILY_QUOTA, MAX_OPEN, MAX_TEXT_BYTES
+from apps.debates.config import BPS, DAILY_QUOTA, MAX_OPEN, MAX_TEXT_BYTES, QUEUE_POLL_SECONDS
 
 ZERO = "0x" + "00" * 32
 ID_RE = re.compile(r"^[0-9a-f]{16}$")
@@ -148,6 +148,7 @@ class Debates:
         self.clock, self.log = clock, log
         self.cursor_ref = db.collection("checkpoints").document(f"debates-{C}")
         self.last_full_tally = 0.0
+        self.last_pull, self.last_pulled = None, 0
 
     # ---------- lookups ----------
 
@@ -401,7 +402,10 @@ class Debates:
 
     def tick(self):
         self.resolve_registry()
-        self.pull()
+        # The queue is read every QUEUE_POLL_SECONDS, and again at once while the last read found messages
+        now = self.clock()
+        if self.last_pull is None or self.last_pulled > 0 or now - self.last_pull >= QUEUE_POLL_SECONDS:
+            self.last_pull, self.last_pulled = now, self.pull()
         if self.clock() - self.last_full_tally >= 60:
             self.last_full_tally = self.clock()
             self.tally_all()
