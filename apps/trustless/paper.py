@@ -14,11 +14,14 @@ from docstore import AlreadyExists
 FEED_PHRASES = {
     'createProject': 'Created the project', 'setParties': 'Named the parties of',
     'sendFunds': 'Funded', 'sendFundsWithImmediate': 'Funded', 'immediateFundsReleased': 'Released funds at signing on',
-    'signContract': 'Signed', 'voteToRelease': 'Voted to release', 'voteToDispute': 'Voted to dispute',
-    'projectDisputed': 'Disputed', 'projectClosed': 'Closed', 'arbitrate': 'Ruled on',
+    'signContract': 'Signed', 'declareDone': 'Declared the work done on', 'dispute': 'Disputed their share of',
+    'undisputedReleased': 'Released the undisputed shares of', 'contest': 'Contested the disputes on',
+    'disputeUncontested': 'Left the disputes uncontested on', 'durationExpired': 'Ran out of time on',
+    'paymentOwed': 'Could not be paid by', 'claimOwed': 'Collected a payment owed by',
+    'projectDisputed': 'Went to arbitration:', 'projectClosed': 'Closed', 'arbitrate': 'Ruled on',
     'finalizeArbitration': 'Finalized the ruling on', 'daoOverruled': 'Overruled the arbiter of',
     'withdrawAsContractor': 'Was paid for', 'withdrawAsContributor': 'Withdrew their backing from',
-    'authorPaid': 'Paid the author of', 'vetoedByDao': 'Vetoed', 'reclaimArbitrationStake': 'Reclaimed the stake on',
+    'authorPaid': 'Paid the author of', 'vetoedByDao': 'Vetoed',
     'sweepOrphanedTokens': 'Swept stray tokens from',
 }
 
@@ -108,8 +111,15 @@ class Paper:
                 'ContributorWithdrawn': self.handle_contributor_withdrawn,
                 'AuthorPaid': self.handle_author_paid,
                 'VetoedByDao': self.handle_vetoed_by_dao,
-                'BackerVoteCast': self.handle_backer_vote_cast,
-                'ArbitrationStakeReclaimed': self.handle_arbitration_stake_reclaimed,
+                'TermsFixed': self.handle_terms_fixed,
+                'WorkDeclared': self.handle_work_declared,
+                'ShareDisputed': self.handle_share_disputed,
+                'UndisputedReleased': self.handle_undisputed_released,
+                'DisputeContested': self.handle_dispute_contested,
+                'DisputeUncontested': self.handle_dispute_uncontested,
+                'DurationExpired': self.handle_duration_expired,
+                'PaymentOwed': self.handle_payment_owed,
+                'OwedClaimed': self.handle_owed_claimed,
                 'OrphanedTokensSwept': self.handle_orphaned_tokens_swept,
             }
             if func in handlers:
@@ -184,6 +194,18 @@ class Paper:
         read_contract = self.web3.eth.contract(address=self.address, abi=json.loads(projectReadAbi))
         total, immediate, locked = read_contract.functions.contributions(Web3.to_checksum_address(who)).call()
         return total, immediate, locked
+
+    def _read_terms(self):
+        """The terms fixed when the parties were named and the end of the cooling-off, from the project
+        contract. A project whose parties are named at creation emits TermsFixed before the indexer
+        follows it, so its creation reads them instead."""
+        read = self.web3.eth.contract(address=self.address, abi=json.loads(projectReadAbi))
+        names = ('platformFeeBps', 'authorFeeBps', 'arbitrationFeeBps', 'disputeWindow', 'contestWindow',
+                 'arbitrationTimeout', 'appealPeriod', 'duration')
+        return {
+            'terms': dict(zip(names, [int(v) for v in read.functions.terms().call()])),
+            'coolingOffPeriodEnds': int(read.functions.coolingOffPeriodEnds().call()),
+        }
 
     def _update_amount_from_onchain(self, extra=None):
         """Read actual balance from on-chain and update Firestore amount field, in one update with any
@@ -264,11 +286,20 @@ class Paper:
                 createdAt=created_at,
             )
 
+            doc = project.to_firestore()
+            if project.stage == Stage.PENDING:
+                try:
+                    named = Paper(address=project_address, kind='project', web3=self.web3, db=self.db,
+                                  daos_collection=self.daos_collection, dao_address=self.dao_address)
+                    doc.update(named._read_terms())
+                except Exception as e:
+                    print(f"[trustless] Could not read the terms of {project_address}: {e}")
+
             # Write to Firestore
             project_ref = self._get_project_ref(project_address)
             # On a replay the doc already reflects later events; don't reset it
             try:
-                project_ref.create(project.to_firestore())
+                project_ref.create(doc)
             except AlreadyExists:
                 pass
 
@@ -383,15 +414,122 @@ class Paper:
         decoded = contract.events.ContractSigned().process_log(log)
         args = decoded['args']
 
-        self._get_project_ref().update({
-            'stage': Stage.ONGOING,
-        })
+        # Signing starts the project's duration: the contractor has until the deadline to declare the work done
+        updates = {'stage': Stage.ONGOING}
+        try:
+            read = self.web3.eth.contract(address=self.address, abi=json.loads(projectReadAbi))
+            updates['deadline'] = int(read.functions.deadline().call())
+        except Exception as e:
+            print(f"[trustless] Could not read the deadline of {self.address}: {e}")
+        self._get_project_ref().update(updates)
 
         self._record_transaction(log, "signContract", {
             "contractor": args['contractor'],
         })
 
         print(f"[trustless] ContractSigned: stage -> ongoing")
+
+    def handle_terms_fixed(self, log):
+        """Handle TermsFixed - the jurisdiction's fees and periods and the author's duration, as they
+        stay for this project, and the end of the cooling-off"""
+        args = self.get_contract().events.TermsFixed().process_log(log)['args']
+        names = ('platformFeeBps', 'authorFeeBps', 'arbitrationFeeBps', 'disputeWindow', 'contestWindow',
+                 'arbitrationTimeout', 'appealPeriod', 'duration')
+        self._get_project_ref().update({
+            'terms': {n: int(args[n]) for n in names},
+            'coolingOffPeriodEnds': int(args['coolingOffPeriodEnds']),
+        })
+        print(f"[trustless] TermsFixed: duration {args['duration']}s")
+
+    def handle_work_declared(self, log):
+        """Handle WorkDeclared - the contractor declared the work done: the dispute window opens"""
+        args = self.get_contract().events.WorkDeclared().process_log(log)['args']
+        self._get_project_ref().update({'stage': Stage.REVIEW, 'reviewEnds': int(args['reviewEnds'])})
+        self._record_transaction(log, "declareDone", {
+            "contractor": args['contractor'],
+            "reviewEnds": int(args['reviewEnds']),
+        })
+        print(f"[trustless] WorkDeclared: stage -> review")
+
+    def handle_share_disputed(self, log):
+        """Handle ShareDisputed - a backer disputed their own locked share and put down the deposit"""
+        args = self.get_contract().events.ShareDisputed().process_log(log)['args']
+        backer = args['backer'].lower()
+        self._get_backers_collection().document(backer).set({
+            'address': backer,
+            'disputed': True,
+            'disputedAmount': str(args['amount']),
+            'deposit': str(args['deposit']),
+            'lastUpdated': datetime.now(timezone.utc),
+        }, merge=True)
+        # The total from contract state, so a replayed event can't count twice. The deposit is in the balance
+        extra = {}
+        try:
+            read = self.web3.eth.contract(address=self.address, abi=json.loads(projectReadAbi))
+            extra['totalDisputed'] = str(read.functions.totalDisputed().call())
+        except Exception as e:
+            print(f"[trustless] Could not read totalDisputed of {self.address}: {e}")
+        self._update_amount_from_onchain(extra)
+        self._record_transaction(log, "dispute", {
+            "backer": backer,
+            "amount": str(args['amount']),
+            "deposit": str(args['deposit']),
+        })
+        print(f"[trustless] ShareDisputed: {backer[:10]}... disputed {args['amount']} wei")
+
+    def handle_undisputed_released(self, log):
+        """Handle UndisputedReleased - the dispute window closed: the shares nobody disputed are the contractor's"""
+        args = self.get_contract().events.UndisputedReleased().process_log(log)['args']
+        self._get_project_ref().update({'undisputedReleased': str(args['amount']), 'reviewSettled': True})
+        self._record_transaction(log, "undisputedReleased", {"amount": str(args['amount'])})
+        print(f"[trustless] UndisputedReleased: {args['amount']} wei")
+
+    def handle_dispute_contested(self, log):
+        """Handle DisputeContested - the contractor matched the backers' deposits; ProjectDisputed follows"""
+        args = self.get_contract().events.DisputeContested().process_log(log)['args']
+        self._update_amount_from_onchain({'contractorDeposit': str(args['deposit'])})
+        self._record_transaction(log, "contest", {
+            "contractor": args['contractor'],
+            "deposit": str(args['deposit']),
+        })
+        print(f"[trustless] DisputeContested: deposit {args['deposit']} wei")
+
+    def handle_dispute_uncontested(self, log):
+        """Handle DisputeUncontested - the contractor didn't contest in time: the disputing backers get
+        their shares and deposits back; ProjectClosed follows"""
+        args = self.get_contract().events.DisputeUncontested().process_log(log)['args']
+        self._get_project_ref().update({'disputeUncontested': True})
+        self._record_transaction(log, "disputeUncontested", {
+            "contractor": args['contractor'],
+            "disputed": str(args['disputed']),
+        })
+        print(f"[trustless] DisputeUncontested: {args['disputed']} wei back to the backers")
+
+    def handle_duration_expired(self, log):
+        """Handle DurationExpired - the contractor declared nothing before the deadline; ProjectClosed follows"""
+        args = self.get_contract().events.DurationExpired().process_log(log)['args']
+        self._get_project_ref().update({'durationExpired': True})
+        self._record_transaction(log, "durationExpired", {"contractor": args['contractor']})
+        print(f"[trustless] DurationExpired")
+
+    def handle_payment_owed(self, log):
+        """Handle PaymentOwed - a payee couldn't be sent their payment; it stays in the project for them"""
+        args = self.get_contract().events.PaymentOwed().process_log(log)['args']
+        self._record_transaction(log, "paymentOwed", {
+            "payee": args['payee'],
+            "amount": str(args['amount']),
+        })
+        print(f"[trustless] PaymentOwed: {args['amount']} wei to {args['payee'][:10]}...")
+
+    def handle_owed_claimed(self, log):
+        """Handle OwedClaimed - a payment owed left the project"""
+        args = self.get_contract().events.OwedClaimed().process_log(log)['args']
+        self._update_amount_from_onchain()
+        self._record_transaction(log, "claimOwed", {
+            "payee": args['payee'],
+            "amount": str(args['amount']),
+        })
+        print(f"[trustless] OwedClaimed: {args['amount']} wei")
 
     def handle_project_disputed(self, log):
         """Handle ProjectDisputed - stage becomes dispute"""
@@ -597,17 +735,6 @@ class Paper:
 
         print(f"[trustless] VetoedByDao: stage -> closed (0% to contractor)")
 
-    def handle_arbitration_stake_reclaimed(self, log):
-        """Handle ArbitrationStakeReclaimed - contractor took back their half of the arbitration fee"""
-        decoded = self.get_contract().events.ArbitrationStakeReclaimed().process_log(log)
-        args = decoded['args']
-        self._update_amount_from_onchain()
-        self._record_transaction(log, "reclaimArbitrationStake", {
-            "contractor": args['contractor'],
-            "amount": str(args['amount']),
-        })
-        print(f"[trustless] ArbitrationStakeReclaimed: {args['amount']} wei")
-
     def handle_orphaned_tokens_swept(self, log):
         """Handle OrphanedTokensSwept - stray tokens sent to the DAO treasury"""
         decoded = self.get_contract().events.OrphanedTokensSwept().process_log(log)
@@ -617,37 +744,6 @@ class Paper:
             "token": args['token'],
             "amount": str(args['amount']),
         })
-
-    def handle_backer_vote_cast(self, log):
-        """Handle BackerVoteCast - record backer's vote for/against fund release"""
-        contract = self.get_contract()
-        if not contract:
-            return
-
-        decoded = contract.events.BackerVoteCast().process_log(log)
-        args = decoded['args']
-
-        voter = args['voter'].lower()
-        for_dispute = args['forDispute']
-        voting_power = str(args['votingPower'])
-
-        # Update backer's vote in Firestore
-        # vote field expects: "none", "release", or "dispute"
-        vote_value = "dispute" if for_dispute else "release"
-        backer_ref = self._get_backers_collection().document(voter)
-        backer_ref.set({
-            'vote': vote_value,
-            'votingPower': voting_power,
-        }, merge=True)
-
-        self._record_transaction(log, "voteToDispute" if for_dispute else "voteToRelease", {
-            "voter": voter,
-            "forDispute": for_dispute,
-            "votingPower": voting_power,
-        })
-
-        vote_type = "dispute" if for_dispute else "release"
-        print(f"[trustless] BackerVoteCast: {voter[:10]}... voted for {vote_type} with {voting_power} power")
 
     # ============ DAO proposal links ============
 

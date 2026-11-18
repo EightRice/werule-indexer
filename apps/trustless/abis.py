@@ -75,19 +75,13 @@ projectReadAbi = '''[
         "stateMutability": "view",
         "type": "function"
     },
-    {
-        "inputs": [],
-        "name": "arbitrationFeePaidOut",
-        "outputs": [
-            {
-                "internalType": "bool",
-                "name": "",
-                "type": "bool"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
+    {"inputs": [], "name": "coolingOffPeriodEnds", "outputs": [{"name": "", "type": "uint256"}], "stateMutability": "view", "type": "function"},
+    {"inputs": [], "name": "deadline", "outputs": [{"name": "", "type": "uint256"}], "stateMutability": "view", "type": "function"},
+    {"inputs": [], "name": "reviewEnds", "outputs": [{"name": "", "type": "uint256"}], "stateMutability": "view", "type": "function"},
+    {"inputs": [], "name": "totalDisputed", "outputs": [{"name": "", "type": "uint256"}], "stateMutability": "view", "type": "function"},
+    {"inputs": [], "name": "terms", "outputs": [{"name": "platformFeeBps", "type": "uint16"}, {"name": "authorFeeBps", "type": "uint16"}, {"name": "arbitrationFeeBps", "type": "uint16"}, {"name": "disputeWindow", "type": "uint40"}, {"name": "contestWindow", "type": "uint40"}, {"name": "arbitrationTimeout", "type": "uint40"}, {"name": "appealPeriod", "type": "uint40"}, {"name": "duration", "type": "uint40"}], "stateMutability": "view", "type": "function"},
+    {"inputs": [{"name": "", "type": "address"}], "name": "disputing", "outputs": [{"name": "", "type": "bool"}], "stateMutability": "view", "type": "function"},
+    {"inputs": [{"name": "", "type": "address"}], "name": "depositOf", "outputs": [{"name": "", "type": "uint256"}], "stateMutability": "view", "type": "function"},
     {
         "inputs": [],
         "name": "disputeResolution",
@@ -407,48 +401,15 @@ projectAbi = '''[
         "name": "VetoedByDao",
         "type": "event"
     },
-    {
-        "anonymous": false,
-        "inputs": [
-            {
-                "indexed": true,
-                "internalType": "address",
-                "name": "voter",
-                "type": "address"
-            },
-            {
-                "indexed": false,
-                "internalType": "uint256",
-                "name": "votingPower",
-                "type": "uint256"
-            },
-            {
-                "indexed": false,
-                "internalType": "bool",
-                "name": "forDispute",
-                "type": "bool"
-            }
-        ],
-        "name": "BackerVoteCast",
-        "type": "event"
-    },
-    {
-        "anonymous": false,
-        "inputs": [
-            {
-                "indexed": false,
-                "name": "contractor",
-                "type": "address"
-            },
-            {
-                "indexed": false,
-                "name": "amount",
-                "type": "uint256"
-            }
-        ],
-        "name": "ArbitrationStakeReclaimed",
-        "type": "event"
-    },
+    {"anonymous": false, "name": "TermsFixed", "type": "event", "inputs": [{"indexed": false, "name": "platformFeeBps", "type": "uint256"}, {"indexed": false, "name": "authorFeeBps", "type": "uint256"}, {"indexed": false, "name": "arbitrationFeeBps", "type": "uint256"}, {"indexed": false, "name": "disputeWindow", "type": "uint256"}, {"indexed": false, "name": "contestWindow", "type": "uint256"}, {"indexed": false, "name": "arbitrationTimeout", "type": "uint256"}, {"indexed": false, "name": "appealPeriod", "type": "uint256"}, {"indexed": false, "name": "duration", "type": "uint256"}, {"indexed": false, "name": "coolingOffPeriodEnds", "type": "uint256"}]},
+    {"anonymous": false, "name": "WorkDeclared", "type": "event", "inputs": [{"indexed": true, "name": "contractor", "type": "address"}, {"indexed": false, "name": "reviewEnds", "type": "uint256"}]},
+    {"anonymous": false, "name": "ShareDisputed", "type": "event", "inputs": [{"indexed": true, "name": "backer", "type": "address"}, {"indexed": false, "name": "amount", "type": "uint256"}, {"indexed": false, "name": "deposit", "type": "uint256"}]},
+    {"anonymous": false, "name": "UndisputedReleased", "type": "event", "inputs": [{"indexed": false, "name": "amount", "type": "uint256"}]},
+    {"anonymous": false, "name": "DisputeContested", "type": "event", "inputs": [{"indexed": true, "name": "contractor", "type": "address"}, {"indexed": false, "name": "deposit", "type": "uint256"}]},
+    {"anonymous": false, "name": "DisputeUncontested", "type": "event", "inputs": [{"indexed": true, "name": "contractor", "type": "address"}, {"indexed": false, "name": "disputed", "type": "uint256"}]},
+    {"anonymous": false, "name": "DurationExpired", "type": "event", "inputs": [{"indexed": true, "name": "contractor", "type": "address"}]},
+    {"anonymous": false, "name": "PaymentOwed", "type": "event", "inputs": [{"indexed": true, "name": "payee", "type": "address"}, {"indexed": false, "name": "amount", "type": "uint256"}]},
+    {"anonymous": false, "name": "OwedClaimed", "type": "event", "inputs": [{"indexed": true, "name": "payee", "type": "address"}, {"indexed": false, "name": "amount", "type": "uint256"}]},
     {
         "anonymous": false,
         "inputs": [

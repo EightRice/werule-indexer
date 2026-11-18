@@ -20,8 +20,8 @@ from apps.trustless.paper import Paper, DAO_LINK_FIELDS
 import startup_cache
 
 STAGE_MAP = {
-    0: 'open', 1: 'pending', 2: 'ongoing', 3: 'dispute',
-    4: 'appealable', 5: 'appeal', 6: 'closed',
+    0: 'open', 1: 'pending', 2: 'ongoing', 3: 'review',
+    4: 'dispute', 5: 'appealable', 6: 'closed',
 }
 
 

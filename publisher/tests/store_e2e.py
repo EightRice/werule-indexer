@@ -134,7 +134,7 @@ def seed(db):
             "daoAddress": DAO2, "economyAddress": "0x" + "4" * 40, "createdAt": ts(2), "amount": "0"})
     for b in BACKERS:
         pr.collection("backers").document(b).set({"address": b, "contribution": "100", "immediateBps": 0,
-                                                  "vote": "none", "lastUpdated": ts(2)})
+                                                  "lastUpdated": ts(2)})
     pr.collection("activity").document("0x" + "bb" * 32 + "_1").set({
         "sender": BACKERS[0], "functionName": "sendFunds", "contractAddress": PROJECT, "projectId": PROJECT,
         "params": {"amount": "100"}, "time": ts(2), "blockNumber": 6})

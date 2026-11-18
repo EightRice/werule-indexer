@@ -68,7 +68,7 @@ Per network `{N}` (= `contracts` doc id = werule `Network.name`, e.g. `Etherlink
 | `{C}/{dao}/members/{addr}` | homebase paper | id checksummed; `address`, `personalBalance` uint256 string, `votingWeight`, `delegate`, `constituents`, `balanceSort` double (may be missing on legacy docs), `proposalsVoted`, `proposalsCreated` (arrays of pids, about 80 B each, unbounded), `lastSeen` (Timestamp, rewritten on every full set) |
 | `{C}/{dao}/activity/{txHash}_{logIndex}` | activity.py (homebase, trustless) | `type`, `summary`, `actor`, `time` (Timestamp), `blockNumber`, `txHash`, `targetKind`, `targetId`, `targetLabel`, extras |
 | `{C}/{dao}/projects/{lower}` | trustless paper | id lowercase, DAO segment checksummed (`trustless/paper.py` checksums `dao_address`); `createdAt` (Timestamp); fields per `trustless/entities.py Project.to_firestore`; link fields MAY be set to `null` |
-| `{C}/{dao}/projects/{lower}/backers/{addr}` | trustless paper | id lowercase; `address`, `contribution` (uint256 string), `immediateBps`, `vote`, `lastUpdated`; after close, `settled`/`withdrawn` merged in; deleted on withdrawal before signing |
+| `{C}/{dao}/projects/{lower}/backers/{addr}` | trustless paper | id lowercase; `address`, `contribution` (uint256 string), `immediateBps`, `lastUpdated`; once the backer disputes their share, `disputed` (true), `disputedAmount` and `deposit` (uint256 strings); after close, `settled`/`withdrawn` merged in; deleted on withdrawal before signing |
 | `{C}/{dao}/projects/{lower}/activity/{txHash}_{logIndex}` | trustless paper | `sender`, `functionName`, `contractAddress`, `projectId`, `params` map, `time` (Timestamp), `blockNumber` |
 | `{C}/{dao}/debates/{d}` | homebase paper | NOT published in v1 (werule reads debates from chain) |
 

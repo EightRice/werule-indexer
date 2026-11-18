@@ -29,8 +29,15 @@ PROJECT_EVENT_SIGNATURES = [
     "ContributorWithdrawn(address,uint256)",
     "AuthorPaid(address,uint256)",
     "VetoedByDao(address)",
-    "BackerVoteCast(address,uint256,bool)",
-    "ArbitrationStakeReclaimed(address,uint256)",
+    "TermsFixed(uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)",
+    "WorkDeclared(address,uint256)",
+    "ShareDisputed(address,uint256,uint256)",
+    "UndisputedReleased(uint256)",
+    "DisputeContested(address,uint256)",
+    "DisputeUncontested(address,uint256)",
+    "DurationExpired(address)",
+    "PaymentOwed(address,uint256)",
+    "OwedClaimed(address,uint256)",
     "OrphanedTokensSwept(address,uint256)",
 ]
 

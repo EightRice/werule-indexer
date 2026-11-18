@@ -9,9 +9,9 @@ class Stage:
     OPEN = "open"
     PENDING = "pending"
     ONGOING = "ongoing"
+    REVIEW = "review"  # the contractor declared the work done; the dispute window, then the time to contest
     DISPUTE = "dispute"
     APPEALABLE = "appealable"
-    APPEAL = "appeal"
     CLOSED = "closed"
 
 
@@ -35,8 +35,12 @@ class Project:
     economyAddress: str = ""
     createdAt: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     amount: str = "0"  # Wei as string
-    votesToRelease: List[str] = field(default_factory=list)
-    votesToDispute: List[str] = field(default_factory=list)
+    # The jurisdiction's settings as fixed when the parties were named (TermsFixed), and the clock
+    terms: Optional[dict] = None
+    coolingOffPeriodEnds: Optional[int] = None
+    deadline: Optional[int] = None      # the last moment the contractor can declare the work done
+    reviewEnds: Optional[int] = None    # the end of the dispute window
+    totalDisputed: str = "0"            # locked funds the backers disputed
     # Additional fields for tracking
     immediateReleased: str = "0"
     disputeResolution: Optional[int] = None  # Percent 0-100
@@ -61,8 +65,11 @@ class Project:
             "economyAddress": self.economyAddress.lower() if self.economyAddress else "",
             "createdAt": self.createdAt,
             "amount": self.amount,
-            "votesToRelease": self.votesToRelease,
-            "votesToDispute": self.votesToDispute,
+            "terms": self.terms,
+            "coolingOffPeriodEnds": self.coolingOffPeriodEnds,
+            "deadline": self.deadline,
+            "reviewEnds": self.reviewEnds,
+            "totalDisputed": self.totalDisputed,
             "immediateReleased": self.immediateReleased,
             "disputeResolution": self.disputeResolution,
             "rulingHash": self.rulingHash,
@@ -88,8 +95,11 @@ class Project:
             economyAddress=doc_dict.get("economyAddress", ""),
             createdAt=doc_dict.get("createdAt", datetime.now(timezone.utc)),
             amount=doc_dict.get("amount", "0"),
-            votesToRelease=doc_dict.get("votesToRelease", []),
-            votesToDispute=doc_dict.get("votesToDispute", []),
+            terms=doc_dict.get("terms"),
+            coolingOffPeriodEnds=doc_dict.get("coolingOffPeriodEnds"),
+            deadline=doc_dict.get("deadline"),
+            reviewEnds=doc_dict.get("reviewEnds"),
+            totalDisputed=doc_dict.get("totalDisputed", "0"),
             immediateReleased=doc_dict.get("immediateReleased", "0"),
             disputeResolution=doc_dict.get("disputeResolution"),
             rulingHash=doc_dict.get("rulingHash", ""),
@@ -103,14 +113,14 @@ class Backer:
     """Backer entity for project backers subcollection"""
     address: str
     contribution: str = "0"  # Wei as string
-    vote: str = "none"  # "none", "release", or "dispute"
+    disputed: bool = False  # disputed their own locked share during the dispute window
     lastUpdated: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     immediateBps: int = 0  # Basis points 0-2000 (max 20%)
 
     def to_firestore(self) -> dict:
         return {
             "contribution": self.contribution,
-            "vote": self.vote,
+            "disputed": self.disputed,
             "lastUpdated": self.lastUpdated,
             "immediateBps": self.immediateBps,
         }
@@ -120,7 +130,7 @@ class Backer:
         return cls(
             address=address,
             contribution=doc_dict.get("contribution", "0"),
-            vote=doc_dict.get("vote", "none"),
+            disputed=doc_dict.get("disputed", False),
             lastUpdated=doc_dict.get("lastUpdated", datetime.now(timezone.utc)),
             immediateBps=doc_dict.get("immediateBps", 0),
         )
