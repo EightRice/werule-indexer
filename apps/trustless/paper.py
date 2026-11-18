@@ -31,6 +31,8 @@ PENDING, ACTIVE, CANCELED, DEFEATED, SUCCEEDED, QUEUED, EXPIRED, EXECUTED = rang
 DAO_LINK_FIELDS = {'appeal': 'appealProposalId', 'veto': 'vetoProposalId'}
 # DaoProposalHold.GRACE: a passed proposal holds this long after its deadline (or eta, once queued)
 HOLD_GRACE = 86400
+# Set once a linked proposal passed and its hold ran out without it being executed: it still can be
+PASSED_FIELDS = {'appeal': 'appealProposalPassed', 'veto': 'vetoProposalPassed'}
 GOVERNOR_STATE_ABI = json.loads('''[
   {"inputs":[{"name":"proposalId","type":"uint256"}],"name":"state","outputs":[{"name":"","type":"uint8"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"name":"proposalId","type":"uint256"}],"name":"proposalDeadline","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
@@ -598,7 +600,7 @@ class Paper:
         if Web3.to_checksum_address(governor) != Web3.to_checksum_address(log['address']):
             print(f"[trustless] Ignoring {kind} proposal from a different governor for {self.address}")
             return
-        self._get_project_ref().update({DAO_LINK_FIELDS[kind]: str(proposal_id)})
+        self._get_project_ref().update({DAO_LINK_FIELDS[kind]: str(proposal_id), PASSED_FIELDS[kind]: False})
         self.dao_links[kind] = int(proposal_id)
         self.dao_governor = Web3.to_checksum_address(governor)
         self._record_transaction(log, kind, {
@@ -749,9 +751,11 @@ class Paper:
 
     def check_links(self, now: int):
         """Clears each linked DAO proposal (appealProposalId, vetoProposalId) once it can no longer
-        pass: canceled, defeated, expired, or past the hold grace without being queued or executed
-        (the rule DaoProposalHold.isLive applies on-chain), so the app offers Appeal, Escalate or a
-        new veto again. An executed overrule or veto closes the project, so its link stays."""
+        pass: canceled, defeated or expired, so the app offers Appeal, Escalate or a new veto again.
+        An executed overrule or veto closes the project, so its link stays. So does the link of a
+        proposal that passed and wasn't executed while it held the project (the rule
+        DaoProposalHold.isLive applies on-chain): anyone can still execute it, so the project page
+        keeps showing it, flagged as passed."""
         for kind, field in list(DAO_LINK_FIELDS.items()):
             pid = self.dao_links.get(kind)
             if pid is None:
@@ -773,7 +777,12 @@ class Paper:
             ref = self._get_project_ref()
             snap = ref.get()
             # A later proposal of the same kind may have replaced it already
-            if snap.exists and str((snap.to_dict() or {}).get(field)) == str(pid):
+            current = snap.exists and str((snap.to_dict() or {}).get(field)) == str(pid)
+            if state in (SUCCEEDED, QUEUED):
+                if current and not (snap.to_dict() or {}).get(PASSED_FIELDS[kind]):
+                    ref.update({PASSED_FIELDS[kind]: True})
+                    print(f"[trustless] {kind} proposal {pid} on {self.address} passed and is not executed yet; link kept")
+            elif current:
                 ref.update({field: None})
                 print(f"[trustless] {kind} proposal {pid} on {self.address} ended without executing (state {state}); link cleared")
             del self.dao_links[kind]

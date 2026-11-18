@@ -47,6 +47,9 @@ class Project:
     rulingHash: str = ""
     appealProposalId: Optional[str] = None
     vetoProposalId: Optional[str] = None
+    # A linked proposal that passed and outlived its hold without being executed (it still can be)
+    appealProposalPassed: bool = False
+    vetoProposalPassed: bool = False
 
     def to_firestore(self) -> dict:
         """Convert to Firestore document format"""
@@ -75,6 +78,8 @@ class Project:
             "rulingHash": self.rulingHash,
             "appealProposalId": self.appealProposalId,
             "vetoProposalId": self.vetoProposalId,
+            "appealProposalPassed": self.appealProposalPassed,
+            "vetoProposalPassed": self.vetoProposalPassed,
         }
 
     @classmethod
@@ -105,6 +110,8 @@ class Project:
             rulingHash=doc_dict.get("rulingHash", ""),
             appealProposalId=doc_dict.get("appealProposalId"),
             vetoProposalId=doc_dict.get("vetoProposalId"),
+            appealProposalPassed=doc_dict.get("appealProposalPassed", False),
+            vetoProposalPassed=doc_dict.get("vetoProposalPassed", False),
         )
 
 
