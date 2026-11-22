@@ -68,3 +68,11 @@ def test_put(tmp_path, monkeypatch):
     t = DirTarget(str(out))
     networks.put([str(src)], t)
     assert networks.load("Localhost", t)["chainId"] == 31337
+
+
+def test_block_headroom():
+    assert networks.block_headroom({}) == 3
+    assert networks.block_headroom({"blockHeadroom": 30}) == 30
+    assert networks.block_headroom({"blockHeadroom": "30"}) == 30
+    for bad in (0, -5, "x", None):
+        assert networks.block_headroom({"blockHeadroom": bad}) == 3

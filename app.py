@@ -414,7 +414,9 @@ def fetch_logs(addresses, from_block, to_block):
     return found
 
 last_processed_block = -1  # Sentinel for uninitialized state
-BLOCK_HEADROOM = 3  # Query logs 3 blocks behind the head of the chain for safety
+# Query logs this many blocks behind the head of the chain for safety: 3, or the network file's blockHeadroom
+BLOCK_HEADROOM = networks.block_headroom(network_file)
+print(f"Reading events {BLOCK_HEADROOM} blocks behind the head")
 APPEAL_CHECK_SECONDS = 30  # between checks of open appeal proposals
 last_appeal_check = 0
 MAX_BLOCK_RANGE = 500 # Process a maximum of 500 blocks at a time to not overload the RPC

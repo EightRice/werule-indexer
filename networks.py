@@ -10,7 +10,9 @@ to decide what to run.
 
 A network file is the network's contracts document: the same fields the apps read (rpc, chainId,
 jurisdictionFactory, moduleCatalog, moduleProcessor, nativeProject, erc20Project, debatesFactory,
-wrapper..., fromBlock), plus "name" (defaults to the file name). "rpc" is the public RPC URL the apps
+wrapper..., fromBlock), plus "name" (defaults to the file name) and optionally "blockHeadroom": how
+many blocks behind the chain's head the indexer reads events (default 3). A chain whose recent blocks
+can be replaced (Polygon) sets it higher, so an event is indexed only once its block is settled. "rpc" is the public RPC URL the apps
 use: the file is published (networks.json). The indexer connects through RPC_<NAME> (name upper-cased,
 '-' as '_') when that is set, so a keyed RPC URL stays in the indexer's environment.
 
@@ -50,6 +52,18 @@ def _parse(path, raw):
 
 def _rpc_var(name):
     return "RPC_" + name.upper().replace("-", "_")
+
+
+DEFAULT_BLOCK_HEADROOM = 3
+
+
+def block_headroom(data):
+    """Blocks behind the head at which the indexer reads events: the file's blockHeadroom, else 3."""
+    try:
+        n = int(data.get("blockHeadroom") or 0)
+    except (TypeError, ValueError):
+        n = 0
+    return n if n > 0 else DEFAULT_BLOCK_HEADROOM
 
 
 def indexer_rpc(name, data):
