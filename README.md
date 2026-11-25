@@ -29,6 +29,8 @@ python -m publisher --network Localhost --networks-index --target dir:../edge-ou
 
 Environment: `DOCSTORE_PATH` (default `data/werule.sqlite`), `NETWORKS_SOURCE`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` (for `r2:` targets), `NOTIFY_URL` and `NOTIFY_SECRET` (the Worker), `INDEXER_RELAYER_KEY` (pays gas to register DAO proposals on the projects they veto or overrule), `LOG_DIR`.
 
+Signals (off by default, `signals.py`): with `SIGNAL_URL` and `SIGNAL_TOKEN_FILE` (or `SIGNAL_TOKEN`) set, each new jurisdiction is posted to that URL as JSON (`source`, `key`, `sender`, `summary`, `snippet`, `link`) with the token as a bearer. `SIGNAL_OWN_ADDRESSES` lists the operator's own addresses, so their deployments say so. A signal that could not be delivered waits in `signals-outbox-<Network>.json` next to the store and is tried again every minute.
+
 ## Local development
 
 werule with `--dart-define=LOCAL=true` reads `http://127.0.0.1:8788` (files) and `ws://127.0.0.1:8787` (live pushes). The local stack:

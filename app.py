@@ -105,6 +105,9 @@ print(f"Document store: {os.path.abspath(docstore_path)}")
 if networks.sync_to_store(db, args.network, network_file):
     print(f"Network file {args.network} copied into contracts/{args.network}")
 
+import signals
+signals.configure(args.network, network_file, os.path.dirname(os.path.abspath(docstore_path)))
+
 # --- Dynamic App Loading ---
 app_modules = {}  # Store loaded app modules
 app_dbs = {}  # The store client each app writes through (one store for all)

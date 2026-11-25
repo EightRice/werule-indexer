@@ -2,6 +2,7 @@
 
 from apps.homebase.abis import wrapperAbi, daoAbiGlobal, tokenAbiGlobal, wrapper_token_abi, timelock_min_delay_abi, wrapper_w_abi, trustless_wrapper_abi, registryAbi
 from activity import record_activity, format_units, short
+import signals
 from datetime import datetime, timezone, timedelta
 from apps.homebase.entities import ProposalStatus, Proposal, StateInContract, Txaction, Token, Member, Org, Vote, balance_sort
 import re
@@ -420,6 +421,8 @@ class Paper:
             print(f"Error committing batch for DAO {org.name}: {e}")
 
         self._activity(log, 'daoCreated', f"Created {org.name}", dao=org.address)
+        signals.jurisdiction_created(self.web3, log, factory=self.address, name=org.name, symbol=org.symbol,
+                                     governor=org.address, when=org.creationDate, members=org.holders)
         return [org.address, org.govTokenAddress, org.registryAddress]
 
 
