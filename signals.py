@@ -3,12 +3,13 @@
     SIGNAL_URL             where to POST (unset: signals are off, the default)
     SIGNAL_TOKEN_FILE      a file holding the bearer token (or SIGNAL_TOKEN, the token itself)
     SIGNAL_OWN_ADDRESSES   the operator's own addresses, comma-separated: a jurisdiction they deploy says so
+    SIGNAL_SILENCE_OWN     1 marks those signals "expected": true, which asks the receiver to tell nobody
 
 The body is JSON: source "chain:<network>", key "<transaction hash>:<log index>" (the same event always
 gives the same key, so the receiver can drop a repeat: a rebuilt store sends every jurisdiction again),
-sender (who sent the transaction), summary (one line), snippet (plain words), link (the explorer), and
-"expected": true when the sender is one of the operator's own addresses. The receiver answers 200 for a
-signal it took, a repeat included.
+sender (who sent the transaction), summary (one line), snippet (plain words) and link (the explorer);
+with SIGNAL_SILENCE_OWN, also "expected": true when the sender is one of the operator's own addresses.
+The receiver answers 200 for a signal it took, a repeat included.
 
 Sending never holds the indexer up and never fails it. A signal is written to an outbox file next to
 the store and sent from a thread; one that could not be delivered stays in the file and is tried again
@@ -72,7 +73,7 @@ def attached_modules(receipt, factory):
 
 
 def build_jurisdiction_signal(network, explorer, factory, name, symbol, governor, tx_hash, log_index,
-                              block, when, sender, members, modules, own):
+                              block, when, sender, members, modules, own, silence_own=False):
     is_own = str(sender).lower() in own
     name, symbol = _cut(name, MAX_NAME), _cut(symbol, 32)
     time_text = when.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -92,7 +93,7 @@ def build_jurisdiction_signal(network, explorer, factory, name, symbol, governor
         "snippet": snippet,
         "link": f"{explorer.rstrip('/')}/tx/{tx_hash}" if explorer else "",
     }
-    if is_own:
+    if is_own and silence_own:
         signal["expected"] = True
     return signal
 
@@ -209,6 +210,7 @@ def configure(network, network_file, data_dir):
         "name": network,
         "explorer": network_file.get("blockExplorer") or "",
         "own": own_addresses(os.getenv("SIGNAL_OWN_ADDRESSES")),
+        "silence_own": (os.getenv("SIGNAL_SILENCE_OWN") or "").strip().lower() in ("1", "true", "yes"),
     }
     _outbox = Outbox(os.path.join(data_dir, f"signals-outbox-{network}.json"),
                      lambda signal: post(url, _token(), signal))
@@ -229,6 +231,7 @@ def jurisdiction_created(web3, log, factory, name, symbol, governor, when, membe
             network=_network["name"], explorer=_network["explorer"], factory=factory, name=name,
             symbol=symbol, governor=governor, tx_hash=tx_hash, log_index=log["logIndex"],
             block=log["blockNumber"], when=when, sender=receipt["from"], members=members,
-            modules=attached_modules(receipt, factory), own=_network["own"]))
+            modules=attached_modules(receipt, factory), own=_network["own"],
+            silence_own=_network.get("silence_own", False)))
     except Exception as e:
         print(f"Signals: could not build the signal for {name}: {e}")

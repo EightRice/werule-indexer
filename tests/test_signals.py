@@ -14,11 +14,11 @@ TX = "0x" + "ab" * 32
 WHEN = datetime(2026, 11, 26, 9, 5, tzinfo=timezone.utc)
 
 
-def make(sender=SENDER, modules=(), own=()):
+def make(sender=SENDER, modules=(), own=(), silence_own=False):
     return signals.build_jurisdiction_signal(
         network="Ethereum", explorer="https://etherscan.io/", factory=FACTORY, name="Guild", symbol="GLD",
         governor="0x" + "11" * 20, tx_hash=TX, log_index=7, block=123, when=WHEN, sender=sender,
-        members=3, modules=list(modules), own=signals.own_addresses(",".join(own)))
+        members=3, modules=list(modules), own=signals.own_addresses(",".join(own)), silence_own=silence_own)
 
 
 def test_signal_shape():
@@ -38,7 +38,10 @@ def test_own_address_and_modules():
     s = make(modules=["economy", "autonet"], own=[" " + SENDER.lower() + " ", "0x" + "22" * 20])
     assert "Modules: economy, autonet." in s["snippet"]
     assert "is one of the operator's own addresses" in s["snippet"]
-    assert s["expected"] is True
+    assert "expected" not in s  # the operator hears about their own deployments unless they ask not to
+    quiet = make(own=[SENDER], silence_own=True)
+    assert quiet["expected"] is True
+    assert "expected" not in make(sender="0x" + "44" * 20, own=[SENDER], silence_own=True)
 
 
 def test_deployer_text_is_cut_and_flattened():
