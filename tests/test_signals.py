@@ -167,3 +167,36 @@ def test_jurisdiction_created_reads_the_receipt(tmp_path, monkeypatch):
     # A chain read that fails is reported, not raised
     signals.jurisdiction_created(None, log, FACTORY, "Guild", "GLD", "0x0", WHEN, 2)
     assert len(box.pending) == 1
+
+
+def test_skip_own_sends_nothing_for_the_operators_own_deploys(tmp_path, monkeypatch):
+    class Eth:
+        def __init__(self, sender):
+            self.sender = sender
+
+        def get_transaction_receipt(self, tx_hash):
+            return {"from": self.sender, "logs": []}
+
+    class W3:
+        def __init__(self, sender):
+            self.eth = Eth(sender)
+
+    box = signals.Outbox(str(tmp_path / "outbox.json"), None)
+    monkeypatch.setattr(signals, "_outbox", box)
+    monkeypatch.setattr(signals, "_network", {"name": "Sepolia", "explorer": "", "skip_own": True,
+                                              "own": signals.own_addresses(SENDER.upper().replace("0X", "0x"))})
+    log = {"transactionHash": HexBytes(TX), "logIndex": 4, "blockNumber": 99}
+    signals.jurisdiction_created(W3(SENDER), log, FACTORY, "Guild", "GLD", "0x0", WHEN, 2)
+    assert box.pending == []
+    # Anyone else's deploy still goes out
+    signals.jurisdiction_created(W3("0x" + "44" * 20), log, FACTORY, "Guild", "GLD", "0x0", WHEN, 2)
+    assert len(box.pending) == 1
+
+
+def test_configure_reads_skip_own(tmp_path, monkeypatch):
+    monkeypatch.setenv("SIGNAL_URL", "http://127.0.0.1:1/signal")
+    monkeypatch.setenv("SIGNAL_TOKEN", "t")
+    monkeypatch.setenv("SIGNAL_SKIP_OWN", "1")
+    monkeypatch.setattr(signals.Outbox, "start", lambda self: None)
+    assert signals.configure("Sepolia", {}, str(tmp_path)) is True
+    assert signals._network["skip_own"] is True and signals._network["silence_own"] is False

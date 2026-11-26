@@ -4,6 +4,7 @@
     SIGNAL_TOKEN_FILE      a file holding the bearer token (or SIGNAL_TOKEN, the token itself)
     SIGNAL_OWN_ADDRESSES   the operator's own addresses, comma-separated: a jurisdiction they deploy says so
     SIGNAL_SILENCE_OWN     1 marks those signals "expected": true, which asks the receiver to tell nobody
+    SIGNAL_SKIP_OWN        1 sends no signal at all for a jurisdiction one of those addresses deployed
 
 The body is JSON: source "chain:<network>", key "<transaction hash>:<log index>" (the same event always
 gives the same key, so the receiver can drop a repeat: a rebuilt store sends every jurisdiction again),
@@ -193,6 +194,10 @@ class Outbox:
         self.wake.set()
 
 
+def _flag(name):
+    return (os.getenv(name) or "").strip().lower() in ("1", "true", "yes")
+
+
 def configure(network, network_file, data_dir):
     """Turns signals on for this indexer when SIGNAL_URL and a token are set."""
     global _outbox, _network
@@ -210,7 +215,8 @@ def configure(network, network_file, data_dir):
         "name": network,
         "explorer": network_file.get("blockExplorer") or "",
         "own": own_addresses(os.getenv("SIGNAL_OWN_ADDRESSES")),
-        "silence_own": (os.getenv("SIGNAL_SILENCE_OWN") or "").strip().lower() in ("1", "true", "yes"),
+        "silence_own": _flag("SIGNAL_SILENCE_OWN"),
+        "skip_own": _flag("SIGNAL_SKIP_OWN"),
     }
     _outbox = Outbox(os.path.join(data_dir, f"signals-outbox-{network}.json"),
                      lambda signal: post(url, _token(), signal))
@@ -227,6 +233,9 @@ def jurisdiction_created(web3, log, factory, name, symbol, governor, when, membe
     try:
         tx_hash = Web3.to_hex(log["transactionHash"])
         receipt = web3.eth.get_transaction_receipt(tx_hash)
+        if _network.get("skip_own") and str(receipt["from"]).lower() in _network["own"]:
+            print(f"Signals: none for {name}, deployed by the operator's own {receipt['from']} (SIGNAL_SKIP_OWN)")
+            return
         _outbox.add(build_jurisdiction_signal(
             network=_network["name"], explorer=_network["explorer"], factory=factory, name=name,
             symbol=symbol, governor=governor, tx_hash=tx_hash, log_index=log["logIndex"],
