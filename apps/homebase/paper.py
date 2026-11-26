@@ -15,9 +15,9 @@ from apps.generic.converting import decode_function_parameters
 from apps.homebase.eventSignatures import quorum_function_abi, voting_period_function_abi,proposal_threshold_function_abi, voting_delay_function_abi, mint_function_abi, burn_function_abi
 
 
-ATN_EPOCH_SELECTOR = Web3.keccak(text="anchor(string,bytes32,bytes32,bytes32,string,bytes32,bytes32,uint256)")[:4]
-ATN_EPOCH_TYPES = ["string", "bytes32", "bytes32", "bytes32", "string", "bytes32", "bytes32", "uint256"]
-ATN_EPOCH_FIELDS = ["epochId", "epochRoot", "prevEpochRoot", "prevAnchorHash", "agentMintCid", "payloadHash", "agentMintRoot", "cutoff"]
+EPOCH_ANCHOR_SELECTOR = Web3.keccak(text="anchor(string,bytes32,bytes32,bytes32,string,bytes32,bytes32,uint256)")[:4]
+EPOCH_ANCHOR_TYPES = ["string", "bytes32", "bytes32", "bytes32", "string", "bytes32", "bytes32", "uint256"]
+EPOCH_ANCHOR_FIELDS = ["epochId", "epochRoot", "prevEpochRoot", "prevAnchorHash", "claimCid", "payloadHash", "claimRoot", "cutoff"]
 # An AnchorElection's proposal for one epoch: a single-choice vote among the anchors its drawn agents register
 ANCHOR_ELECTION_SELECTOR = Web3.keccak(text="anchorWinner(uint256,uint256)")[:4]
 # Constitutional proposals (trustless-contracts docs/governance.md): the DAO's threshold, and the one
@@ -32,19 +32,19 @@ OPTION_SOURCE_ABI = [{"type": "function", "name": "optionSourceOf", "stateMutabi
                       "inputs": [{"name": "proposalId", "type": "uint256"}], "outputs": [{"name": "", "type": "address"}]}]
 
 
-def _decode_atn_epoch(calldatas):
+def _decode_epoch_anchor(calldatas):
     """The Substrate.anchor arguments if the proposal is exactly one anchor call, else None."""
     if len(calldatas) != 1:
         return None
     data = bytes(calldatas[0]) if not isinstance(calldatas[0], str) else bytes.fromhex(calldatas[0].removeprefix("0x"))
-    if data[:4] != ATN_EPOCH_SELECTOR:
+    if data[:4] != EPOCH_ANCHOR_SELECTOR:
         return None
     try:
         from eth_abi import decode
-        values = decode(ATN_EPOCH_TYPES, data[4:])
+        values = decode(EPOCH_ANCHOR_TYPES, data[4:])
     except Exception:
         return None
-    return {k: ("0x" + v.hex() if isinstance(v, bytes) else v) for k, v in zip(ATN_EPOCH_FIELDS, values)}
+    return {k: ("0x" + v.hex() if isinstance(v, bytes) else v) for k, v in zip(EPOCH_ANCHOR_FIELDS, values)}
 
 
 def _decode_anchor_election(calldatas):
@@ -768,15 +768,15 @@ class Paper:
             link = "(No Link Provided)"
 
         # A daemon's epoch anchor: one call to Substrate.anchor, described in plain text
-        anchor = _decode_atn_epoch(calldatas_raw)
+        anchor = _decode_epoch_anchor(calldatas_raw)
         if anchor is not None:
-            type_ = "atn epoch"
-            name = f"ATN epoch {anchor['epochId']}"
+            type_ = "autonet epoch"
+            name = f"Autonet epoch {anchor['epochId']}"
             desc = (f"Anchors Autonet epoch {anchor['epochId']} on the Substrate.\n"
                     f"Epoch root: {anchor['epochRoot']}\n"
                     f"Previous epoch root: {anchor['prevEpochRoot']}\n"
                     f"Previous anchor: {anchor['prevAnchorHash']}\n"
-                    f"Agent mints: {anchor['agentMintCid'] or '(none)'} (root {anchor['agentMintRoot']})\n"
+                    f"Claims: {anchor['claimCid'] or '(none)'} (root {anchor['claimRoot']})\n"
                     f"Payload hash: {anchor['payloadHash']}")
 
         # An epoch close: the governor counts it as a single-choice election when the target is an
@@ -790,8 +790,8 @@ class Paper:
                     option_source = Web3.to_checksum_address(source)
             except Exception as e:
                 print(f"Could not read the option source of proposal {proposal_id}: {e}")
-            type_ = "atn epoch"
-            name = f"ATN epoch {election[0]} close"
+            type_ = "autonet epoch"
+            name = f"Autonet epoch {election[0]} close"
             desc = (f"Elects the anchor of Autonet epoch {election[0]} (attempt {election[1]}) among the options "
                     f"registered by drawn agents. The winning option is anchored on the Substrate when this executes.")
 
